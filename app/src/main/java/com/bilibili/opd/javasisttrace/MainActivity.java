@@ -20,22 +20,39 @@ public class MainActivity extends AppCompatActivity {
                 });
         findViewById(R.id.root)
                 .setOnDragListener((v, event) -> false);
+
+        staticMethod(getWindowManager());
+        publicMethod(new Bean());
     }
 
     @Override
     protected void onResume() {
         super.onResume();
+        publicMethod(new Bean());
     }
 
     private static void staticMethod(WindowManager windowManager) {
         System.out.println("AAA");
     }
 
-    public static void publicStaticMethod() {
-        System.out.println("AAA");
+    public void publicMethod(Bean b) {
+        System.out.println(1);
     }
 
     public void donotTrace(String a) {
         System.out.println(a);
+    }
+
+
+    public static class Bean {
+        public int getAnInt() {
+            return anInt;
+        }
+
+        public void setAnInt(int anInt) {
+            this.anInt = anInt;
+        }
+
+        private int anInt;
     }
 }

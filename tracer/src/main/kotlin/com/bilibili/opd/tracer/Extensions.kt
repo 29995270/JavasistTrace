@@ -14,14 +14,14 @@ import java.util.regex.Matcher
 /**
  * Created by wq on 2018/3/25.
  */
-fun toCtClasses(input: Collection<TransformInput>, classPool: ClassPool) : List<CtClass> {
+fun ClassPool.insertClassPath(input: Collection<TransformInput>) : List<CtClass> {
     val classNames = ArrayList<String>()
     val allClass = ArrayList<CtClass>()
     input.forEach {
         println("-----------process dir---------------")
         it.directoryInputs.forEach {
             val dirPath = it.file.absolutePath
-            classPool.insertClassPath(it.file.absolutePath)
+            insertClassPath(it.file.absolutePath)
             FileUtils.listFiles(it.file, null, true).forEach {
                 if (it.absolutePath.endsWith(SdkConstants.DOT_CLASS)) {
                     val className = it.absolutePath.substring(dirPath.length + 1, it.absolutePath.length - SdkConstants.DOT_CLASS.length).replace(File.separator, ".")
@@ -34,7 +34,7 @@ fun toCtClasses(input: Collection<TransformInput>, classPool: ClassPool) : List<
         }
         println("-----------process jar---------------")
         it.jarInputs.forEach {
-            classPool.insertClassPath(it.file.absolutePath)
+            insertClassPath(it.file.absolutePath)
             val jarFile = JarFile(it.file)
             val classes = jarFile.entries()
             for (libClass in classes) {
@@ -52,7 +52,7 @@ fun toCtClasses(input: Collection<TransformInput>, classPool: ClassPool) : List<
     println("--------------------------")
     classNames.forEach {
         try {
-            allClass.add(classPool.get(it))
+            allClass.add(get(it))
         } catch (e: NotFoundException) {
             println("class not found exception class name:  $it ")
         }

@@ -48,7 +48,7 @@ class TracerTransform(private val project: Project) : Transform() {
             androidExtension.bootClasspath.forEach {
                 classPool.appendClassPath(it.absolutePath)
             }
-            val box = toCtClasses(inputs, classPool)
+            val box = classPool.insertClassPath(inputs)
             println("tracePackageNames: ${tracer.tracePackageNames}")
             println("excludePackageNames: ${tracer.excludePackageNames}")
             println("excludeMethodNames: ${tracer.excludeMethodSignature}")

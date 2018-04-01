@@ -32,11 +32,13 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
                             val returnType = declaredBehavior.returnType
                             val returnTypeName = returnType.name
                             val argsClassArray = getParamsClassTypeStatements(declaredBehavior)
-                            val insertStatement = "android.util.Log.d(\"AAA\", \"" +
-                                    "${if (isStatic) "s" else ""} ${declaredBehavior.longName} | " +
-                                    "r: $returnTypeName | " +
-                                    "args: $argsClassArray\"" +
-                                    ");"
+                            val insertStatement = """
+                                android.util.Log.d("AAA",
+                                    "t:" + Thread.currentThread().getName() + "_" + Thread.currentThread().getId() + "|" +
+                                    "${if (isStatic) "sm:" else "m:"}${declaredBehavior.longName}|" +
+                                    "r:$returnTypeName|" +
+                                    "args:$argsClassArray");
+                                    """
                             declaredBehavior.insertBefore(insertStatement)
                         }
                     } catch (e: Exception) {
@@ -50,6 +52,11 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
     }
 
     private fun isQualifiedMethod(ctBehavior: CtBehavior): Boolean {
+        //skip short method(may inline by proguard)
+        if (ctBehavior.methodInfo.codeAttribute.codeLength <= 8) {
+            return false
+        }
+
         if (ctBehavior.methodInfo.isStaticInitializer) {
             return false
         }
