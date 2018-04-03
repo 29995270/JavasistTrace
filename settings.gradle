@@ -1,1 +1,1 @@
-include ':app', ':tracer'
+include ':app', ':tracer', ':tracercore'

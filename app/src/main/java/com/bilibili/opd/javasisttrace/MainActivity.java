@@ -5,24 +5,30 @@ import android.support.annotation.Nullable;
 import android.support.v7.app.AppCompatActivity;
 import android.view.WindowManager;
 
+import com.bilibili.opd.tracer.core.annotation.TraceField;
+
+import java.util.Random;
+
 /**
  * Created by wq on 2018/3/8.
  */
 
 public class MainActivity extends AppCompatActivity {
+
+    private Random random = new Random();
+
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         findViewById(R.id.root)
-                .setOnClickListener((view) -> {
-                    System.out.println("AAA");
-                });
+                .setOnClickListener((view) -> publicMethod(new OutBean(random.nextInt(100), random.nextInt(100))));
         findViewById(R.id.root)
                 .setOnDragListener((v, event) -> false);
 
         staticMethod(getWindowManager());
         publicMethod(new Bean());
+        publicMethod(new OutBean(12, 21));
     }
 
     @Override
@@ -36,6 +42,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void publicMethod(Bean b) {
+        System.out.println(1);
+        System.out.println(1);
+    }
+
+    public void publicMethod(OutBean b) {
+        System.out.println(1);
         System.out.println(1);
     }
 
@@ -53,6 +65,7 @@ public class MainActivity extends AppCompatActivity {
             this.anInt = anInt;
         }
 
+        @TraceField
         private int anInt;
     }
 }

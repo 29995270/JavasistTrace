@@ -1,7 +1,10 @@
 package com.bilibili.opd.tracer
 
 import com.bilibili.opd.tracer.extension.TracerExtension
-import javassist.*
+import javassist.CannotCompileException
+import javassist.CtBehavior
+import javassist.CtClass
+import javassist.CtMethod
 import javassist.bytecode.AccessFlag
 import javassist.expr.*
 import java.io.File
@@ -15,6 +18,11 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
     override fun insertCode(box: List<CtClass>, jarFile: File) {
         val outStream = JarOutputStream(FileOutputStream(jarFile))
         for (ctClass in box) {
+            unlockAccessIfNeed(ctClass)
+        }
+
+        println("--------try insert code")
+        for (ctClass in box) {
             if (isNeedInsertClass(ctClass.name)) {
 //                ctClass.modifiers = AccessFlag.setPublic(ctClass.modifiers)
                 if (ctClass.isInterface || ctClass.declaredMethods.isEmpty()) {
@@ -27,28 +35,50 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
                     methodMap[declaredBehavior.longName] = insertMethodCount.incrementAndGet()
                     try {
                         if (declaredBehavior.methodInfo.isMethod) {
-                            println("process method: ${(declaredBehavior as CtMethod).longName}")
-                            val isStatic = declaredBehavior.modifiers and AccessFlag.STATIC != 0
-                            val returnType = declaredBehavior.returnType
-                            val returnTypeName = returnType.name
-                            val argsClassArray = getParamsClassTypeStatements(declaredBehavior)
-                            val insertStatement = """
-                                android.util.Log.d("AAA",
-                                    "t:" + Thread.currentThread().getName() + "_" + Thread.currentThread().getId() + "|" +
-                                    "${if (isStatic) "sm:" else "m:"}${declaredBehavior.longName}|" +
-                                    "r:$returnTypeName|" +
-                                    "args:$argsClassArray");
-                                    """
-                            declaredBehavior.insertBefore(insertStatement)
+                            declaredBehavior.insertBefore(getCodeStatement(declaredBehavior as CtMethod))
                         }
                     } catch (e: Exception) {
                         println("insert code fail $declaredBehavior")
+                        e.printStackTrace()
                     }
                 }
             }
             zipFile(ctClass.toBytecode(), outStream, ctClass.name.replace(".", "/") + ".class")
         }
         outStream.close()
+    }
+
+    private fun unlockAccessIfNeed(ctClass: CtClass) {
+        try {
+            if (isNeedInsertClass(ctClass.name)) {
+                for (field in ctClass.declaredFields) {
+                    for (annotation in field.annotations) {
+                        if ("@com.bilibili.opd.tracer.core.annotation.TraceField" == annotation.toString()) {
+                            println("${ctClass.name} has annotation TraceField")
+                            field.modifiers = AccessFlag.setPublic(field.modifiers)
+                            break
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    private fun getCodeStatement(ctMethod: CtMethod): String {
+        println("process method: ${ctMethod.longName}")
+        val isStatic = ctMethod.modifiers and AccessFlag.STATIC != 0
+        val returnType = ctMethod.returnType
+        val returnTypeName = returnType.name
+        val args = getParamsStatements(ctMethod)
+        return """
+                android.util.Log.d("AAA",
+                    "t:" + Thread.currentThread().getName() + "_" + Thread.currentThread().getId() + "|" +
+                    "${if (isStatic) "sm:" else "m:"}${ctMethod.longName}|" +
+                    "r:$returnTypeName|" +
+                    "args:$args");
+                """
     }
 
     private fun isQualifiedMethod(ctBehavior: CtBehavior): Boolean {
@@ -91,12 +121,51 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
         //方法过滤
         for ((methodName, signature) in tracerExtension.excludeMethodSignature) {
             println("ctBehavior.signature : ${ctBehavior.signature}")
-            if (ctBehavior.signature == signature && ctBehavior.name == methodName){
+            if (ctBehavior.signature == signature && ctBehavior.name == methodName) {
                 return false
             }
         }
         return true
     }
+
+    private fun getParamsStatements(ctMethod: CtMethod): String {
+        if (ctMethod.parameterTypes.isEmpty()) {
+            return " null "
+        }
+        val stringBuilder = StringBuilder()
+        return with(stringBuilder) {
+            var countOfHandled = 0
+            ctMethod.parameterTypes.forEachIndexed { index, paramType ->
+                for (field in paramType.declaredFields) {
+                    for (annotation in field.annotations) {
+                        if ("@com.bilibili.opd.tracer.core.annotation.TraceField" == annotation.toString()) {
+                            println("${paramType.name} has annotation TraceField")
+                            try {
+                                field.modifiers = AccessFlag.setPublic(field.modifiers)
+                            } catch (e: Exception) {
+                                println("open access fail $e")
+                            }
+                            println("print params ${index + 1}.${field.name}")
+                            append(""",$${index + 1}.${field.name}=" + $${index + 1}.${field.name} + """")
+                            countOfHandled ++
+                            break
+                        }
+                    }
+                }
+            }
+
+
+
+            for (parameterType in ctMethod.parameterTypes) {
+
+            }
+            if (startsWith(",")) deleteCharAt(0)
+            if (countOfHandled == 0) return "null"
+            toString()
+        }
+    }
+
+
 
     private var isCallMethod = false
 
@@ -188,23 +257,4 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
         return isCallMethod
     }
 
-    private fun getParamsClassTypeStatements(ctMethod: CtMethod): String {
-        if (ctMethod.parameterTypes.isEmpty()) {
-            return " null "
-        }
-        val stringBuilder = StringBuilder()
-        return with(stringBuilder) {
-            append("new Class[]{")
-            for (parameterType in ctMethod.parameterTypes) {
-                for (field in parameterType.fields) {
-                    field.annotations
-                }
-                append(parameterType.name)
-                append(".class,")
-            }
-            if (endsWith(",")) deleteCharAt(length - 1)
-            append("}")
-            toString()
-        }
-    }
 }
