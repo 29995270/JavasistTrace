@@ -1,14 +1,12 @@
 package com.bilibili.opd.tracer
 
 import com.bilibili.opd.tracer.extension.TracerExtension
-import javassist.CannotCompileException
-import javassist.CtBehavior
-import javassist.CtClass
-import javassist.CtMethod
+import javassist.*
 import javassist.bytecode.AccessFlag
 import javassist.expr.*
 import java.io.File
 import java.io.FileOutputStream
+import java.util.*
 import java.util.jar.JarOutputStream
 
 /**
@@ -48,16 +46,30 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
         outStream.close()
     }
 
+    private fun isTraceField(field: CtField) =
+            field.annotations.any {
+                "@com.bilibili.opd.tracer.core.annotation.TraceField" == it.toString()
+            }
+
+    private fun isIdField(field: CtField) = field.name.endsWith("id", true) && (field.type.name == "int" || field.type.name == "long")
+
+    private fun isCollectionField(field: CtField) =
+            field.type.name == List::class.java.name
+                    || field.type.name == Map::class.java.name
+                    || (!field.type.isInterface && field.type.interfaces.any { it.name == List::class.java.name || it.name == Map::class.java.name })
+
     private fun unlockAccessIfNeed(ctClass: CtClass) {
         try {
             if (isNeedInsertClass(ctClass.name)) {
                 for (field in ctClass.declaredFields) {
-                    for (annotation in field.annotations) {
-                        if ("@com.bilibili.opd.tracer.core.annotation.TraceField" == annotation.toString()) {
+
+                    when {
+                        isTraceField(field) -> {
                             println("${ctClass.name} has annotation TraceField")
                             field.modifiers = AccessFlag.setPublic(field.modifiers)
-                            break
                         }
+                        isIdField(field) -> field.modifiers = AccessFlag.setPublic(field.modifiers)
+                        isCollectionField(field) -> field.modifiers = AccessFlag.setPublic(field.modifiers)
                     }
                 }
             }
@@ -137,34 +149,28 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
             var countOfHandled = 0
             ctMethod.parameterTypes.forEachIndexed { index, paramType ->
                 for (field in paramType.declaredFields) {
-                    for (annotation in field.annotations) {
-                        if ("@com.bilibili.opd.tracer.core.annotation.TraceField" == annotation.toString()) {
-                            println("${paramType.name} has annotation TraceField")
-                            try {
-                                field.modifiers = AccessFlag.setPublic(field.modifiers)
-                            } catch (e: Exception) {
-                                println("open access fail $e")
-                            }
+                    when {
+                        isTraceField(field) -> {
                             println("print params ${index + 1}.${field.name}")
                             append(""",$${index + 1}.${field.name}=" + $${index + 1}.${field.name} + """")
-                            countOfHandled ++
-                            break
+                            countOfHandled++
+                        }
+                        isIdField(field) -> {
+                            append(""",$${index + 1}.${field.name}=" + $${index + 1}.${field.name} + """")
+                            countOfHandled++
+                        }
+                        isCollectionField(field) -> {
+                            append(""",$${index + 1}.${field.name}.size=" + $${index + 1}.${field.name}.size() + """")
+                            countOfHandled++
                         }
                     }
                 }
-            }
-
-
-
-            for (parameterType in ctMethod.parameterTypes) {
-
             }
             if (startsWith(",")) deleteCharAt(0)
             if (countOfHandled == 0) return "null"
             toString()
         }
     }
-
 
 
     private var isCallMethod = false

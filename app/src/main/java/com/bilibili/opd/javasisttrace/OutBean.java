@@ -9,6 +9,8 @@ import com.bilibili.opd.tracer.core.annotation.TraceField;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Created by wq on 2018/4/3.
@@ -30,6 +32,12 @@ public class OutBean {
     private int fieldA;
     @TraceField
     private int fieldB;
+
+    private long xxxid;
+
+    private int wwwwId;
+
+    private List<String> stringList = new ArrayList<>();
 
     public OutBean(int fieldA, int fieldB) {
         this.fieldA = fieldA;
