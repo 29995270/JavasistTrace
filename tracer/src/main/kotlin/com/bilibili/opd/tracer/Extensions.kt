@@ -9,6 +9,8 @@ import org.apache.commons.io.FileUtils
 import java.io.File
 import java.util.*
 import java.util.jar.JarFile
+import kotlin.collections.HashMap
+import kotlin.collections.HashSet
 
 /**
  * Created by wq on 2018/3/25.
@@ -62,7 +64,23 @@ fun ClassPool.insertClassPath(input: Collection<TransformInput>): List<CtClass> 
     return allClass
 }
 
+var start = 0
+val map = HashMap<String, String>()
+
 fun String.compress(): String {
+    var result = this
+    val splited = this.substring(0, this.length - 1).replace("(", ".").split(".")
+    println(splited + "-----------")
+    splited.filter { it.trim().isNotEmpty() }
+            .forEach {
+        var obf = map[it]
+        if (obf == null) {
+            start ++
+            obf = start.toString()
+            map[it] = obf
+        }
+        result = result.replace(it, obf, true)
+    }
     //todo 压缩
-    return this
+    return result
 }
