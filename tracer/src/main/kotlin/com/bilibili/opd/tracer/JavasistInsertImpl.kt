@@ -87,13 +87,12 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
         println("process method: ${ctMethod.longName}")
         val isStatic = ctMethod.modifiers and AccessFlag.STATIC != 0
         val returnType = ctMethod.returnType
-        val returnTypeName = returnType.name
+        val returnTypeName = returnType.name //todo
         val args = getParamsStatements(ctClass, ctMethod)
         return """
                 android.util.Log.d("AAA",
-                    "t:" + Thread.currentThread().getName() + "_" + Thread.currentThread().getId() + "|" +
+                    "t:" + Thread.currentThread().getName() + "|" +
                     "${if (isStatic) "sm:" else "m:"}${ctMethod.longName.compress()}|" +
-                    "r:$returnTypeName|" +
                     "p:$args");
                 """.replace("""( \+ "")""".toRegex(), "")
     }
