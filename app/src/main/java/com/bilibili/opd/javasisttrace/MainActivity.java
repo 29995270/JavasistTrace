@@ -47,8 +47,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void publicMethod(OutBean b) {
-        System.out.println(1);
-        System.out.println(1);
+        System.out.println(b.getFieldA());
+        System.out.println(b.getFieldB());
     }
 
     public void donotTrace(String a) {

@@ -6,7 +6,6 @@ import javassist.bytecode.AccessFlag
 import javassist.expr.*
 import java.io.File
 import java.io.FileOutputStream
-import java.util.*
 import java.util.jar.JarOutputStream
 
 /**
@@ -33,7 +32,9 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
                     methodMap[declaredBehavior.longName] = insertMethodCount.incrementAndGet()
                     try {
                         if (declaredBehavior.methodInfo.isMethod) {
-                            declaredBehavior.insertBefore(getCodeStatement(declaredBehavior as CtMethod))
+                            val codeStatement = getCodeStatement(ctClass, declaredBehavior as CtMethod)
+                            println("----code: $codeStatement")
+                            declaredBehavior.insertBefore(codeStatement)
                         }
                     } catch (e: Exception) {
                         println("insert code fail $declaredBehavior")
@@ -51,12 +52,16 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
                 "@com.bilibili.opd.tracer.core.annotation.TraceField" == it.toString()
             }
 
+    private fun isPrimitiveType(ctClass: CtClass)= ctClass.isPrimitive
+
     private fun isIdField(field: CtField) = field.name.endsWith("id", true) && (field.type.name == "int" || field.type.name == "long")
 
-    private fun isCollectionField(field: CtField) =
-            field.type.name == List::class.java.name
-                    || field.type.name == Map::class.java.name
-                    || (!field.type.isInterface && field.type.interfaces.any { it.name == List::class.java.name || it.name == Map::class.java.name })
+    private fun isStringType(ctClass: CtClass) = ctClass.name == String::class.java.name
+
+    private fun isCollectionType(ctClass: CtClass) =
+            ctClass.name == List::class.java.name
+                    || ctClass.name == Map::class.java.name
+                    || (!ctClass.isInterface && ctClass.interfaces.any { it.name == List::class.java.name || it.name == Map::class.java.name })
 
     private fun unlockAccessIfNeed(ctClass: CtClass) {
         try {
@@ -69,7 +74,7 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
                             field.modifiers = AccessFlag.setPublic(field.modifiers)
                         }
                         isIdField(field) -> field.modifiers = AccessFlag.setPublic(field.modifiers)
-                        isCollectionField(field) -> field.modifiers = AccessFlag.setPublic(field.modifiers)
+                        isCollectionType(field.type) -> field.modifiers = AccessFlag.setPublic(field.modifiers)
                     }
                 }
             }
@@ -78,50 +83,34 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
         }
     }
 
-    private fun getCodeStatement(ctMethod: CtMethod): String {
+    private fun getCodeStatement(ctClass: CtClass, ctMethod: CtMethod): String {
         println("process method: ${ctMethod.longName}")
         val isStatic = ctMethod.modifiers and AccessFlag.STATIC != 0
         val returnType = ctMethod.returnType
         val returnTypeName = returnType.name
-        val args = getParamsStatements(ctMethod)
+        val args = getParamsStatements(ctClass, ctMethod)
         return """
                 android.util.Log.d("AAA",
                     "t:" + Thread.currentThread().getName() + "_" + Thread.currentThread().getId() + "|" +
-                    "${if (isStatic) "sm:" else "m:"}${ctMethod.longName}|" +
+                    "${if (isStatic) "sm:" else "m:"}${ctMethod.longName.compress()}|" +
                     "r:$returnTypeName|" +
-                    "args:$args");
-                """
+                    "p:$args");
+                """.replace("""( \+ "")""".toRegex(), "")
     }
 
     private fun isQualifiedMethod(ctBehavior: CtBehavior): Boolean {
-        //skip short method(may inline by proguard)
-        if (ctBehavior.methodInfo.codeAttribute.codeLength <= 8) {
-            return false
-        }
 
-        if (ctBehavior.methodInfo.isStaticInitializer) {
-            return false
-        }
-
-        // synthetic 方法暂时不aop 比如AsyncTask 会生成一些同名synthetic方法,对synthetic 以及private的方法也插入的代码，主要是针对lambda
-        if (ctBehavior.modifiers and AccessFlag.SYNTHETIC != 0 && !AccessFlag.isPrivate(ctBehavior.modifiers)) {
-            return false
-        }
-        if (ctBehavior.methodInfo.isConstructor) {
-            return false
-        }
-
-        if (ctBehavior.modifiers and AccessFlag.ABSTRACT != 0) {
-            return false
-        }
-        if (ctBehavior.modifiers and AccessFlag.NATIVE != 0) {
-            return false
-        }
-        if (ctBehavior.modifiers and AccessFlag.INTERFACE != 0) {
-            return false
-        }
 
         if (ctBehavior.methodInfo.isMethod) {
+
+            //方法过滤
+            for ((methodName, signature) in tracerExtension.excludeMethodSignature) {
+                println("ctBehavior.signature : ${ctBehavior.signature}")
+                if (ctBehavior.signature == signature && ctBehavior.name == methodName) {
+                    return false
+                }
+            }
+
             if (AccessFlag.isPackage(ctBehavior.modifiers)) {
                 ctBehavior.modifiers = AccessFlag.setPublic(ctBehavior.modifiers)
             }
@@ -130,44 +119,65 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
                 return false
             }
         }
-        //方法过滤
-        for ((methodName, signature) in tracerExtension.excludeMethodSignature) {
-            println("ctBehavior.signature : ${ctBehavior.signature}")
-            if (ctBehavior.signature == signature && ctBehavior.name == methodName) {
-                return false
-            }
+
+        return when {
+            //skip short method(may inline by proguard)
+            ctBehavior.methodInfo.codeAttribute.codeLength <= 8 -> false
+            ctBehavior.methodInfo.isStaticInitializer -> false
+            ctBehavior.methodInfo.isConstructor -> false
+            // synthetic 方法暂时不aop 比如AsyncTask 会生成一些同名synthetic方法,对synthetic 以及private的方法也插入的代码，主要是针对lambda
+            ctBehavior.modifiers and AccessFlag.SYNTHETIC != 0 && !AccessFlag.isPrivate(ctBehavior.modifiers) -> false
+            ctBehavior.modifiers and AccessFlag.ABSTRACT != 0 -> false
+            ctBehavior.modifiers and AccessFlag.NATIVE != 0 -> false
+            ctBehavior.modifiers and AccessFlag.INTERFACE != 0 -> false
+            else -> true
         }
-        return true
     }
 
-    private fun getParamsStatements(ctMethod: CtMethod): String {
+    private fun getParamsStatements(ctClass: CtClass, ctMethod: CtMethod): String {
         if (ctMethod.parameterTypes.isEmpty()) {
-            return " null "
+            return "null"
         }
         val stringBuilder = StringBuilder()
         return with(stringBuilder) {
-            var countOfHandled = 0
             ctMethod.parameterTypes.forEachIndexed { index, paramType ->
-                for (field in paramType.declaredFields) {
-                    when {
-                        isTraceField(field) -> {
-                            println("print params ${index + 1}.${field.name}")
-                            append(""",$${index + 1}.${field.name}=" + $${index + 1}.${field.name} + """")
-                            countOfHandled++
-                        }
-                        isIdField(field) -> {
-                            append(""",$${index + 1}.${field.name}=" + $${index + 1}.${field.name} + """")
-                            countOfHandled++
-                        }
-                        isCollectionField(field) -> {
-                            append(""",$${index + 1}.${field.name}.size=" + $${index + 1}.${field.name}.size() + """")
-                            countOfHandled++
+                val paramStatement: StringBuilder = StringBuilder()
+
+                if (isPrimitiveType(paramType)) {//基本类型，直接打印
+                    paramStatement.append("""";" + $${index + 1}""")
+                } else if (isCollectionType(paramType)) {//集合类型，直接打印长度
+                    paramStatement.append("""";" + $${index + 1}.size()""")
+                } else if (isStringType(paramType)) {//string 类型，直接打印长度
+                    paramStatement.append("""";" + $${index + 1}.length""")
+                } else if (isNeedInsertClass(paramType.name)) {
+                    paramStatement.append(';')
+                    for (field in paramType.declaredFields) {
+                        if (!field.visibleFrom(ctClass)) continue
+                        when {
+                            isTraceField(field) -> {
+                                println("print params ${index + 1}.${field.name}")
+                                paramStatement.append(""",$${index + 1}.${field.name}=" + $${index + 1}.${field.name} + """")
+                            }
+                            isIdField(field) -> {
+                                paramStatement.append(""",$${index + 1}.${field.name}=" + $${index + 1}.${field.name} + """")
+                            }
+                            isCollectionType(field.type) -> {
+                                paramStatement.append("""" + ($${index + 1}.${field.name} == null ? ",$${index + 1}.${field.name}=null" : (",$${index + 1}.${field.name}.size=" + $${index + 1}.${field.name}.size())) + """")
+                            }
                         }
                     }
+                    if (paramStatement.length == 1) {
+                        paramStatement.append('o')
+                    }
+                }
+                if (paramStatement.startsWith(";")) paramStatement.deleteCharAt(0)
+                if (paramStatement.startsWith(",")) paramStatement.deleteCharAt(0)
+                if (index == 0) {
+                    append("""" + ($${index + 1} == null ? "null" : "$paramStatement") + """")
+                } else {
+                    append("""" + ($${index + 1} == null ? ";null" : "$paramStatement") + """")
                 }
             }
-            if (startsWith(",")) deleteCharAt(0)
-            if (countOfHandled == 0) return "null"
             toString()
         }
     }

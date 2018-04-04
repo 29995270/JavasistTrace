@@ -37,7 +37,7 @@ public class OutBean {
 
     private int wwwwId;
 
-    private List<String> stringList = new ArrayList<>();
+    private List<String> stringList = null;
 
     public OutBean(int fieldA, int fieldB) {
         this.fieldA = fieldA;

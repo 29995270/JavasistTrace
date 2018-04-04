@@ -13,7 +13,7 @@ import java.util.jar.JarFile
 /**
  * Created by wq on 2018/3/25.
  */
-fun ClassPool.insertClassPath(input: Collection<TransformInput>) : List<CtClass> {
+fun ClassPool.insertClassPath(input: Collection<TransformInput>): List<CtClass> {
     val classNames = ArrayList<String>()
     val allClass = ArrayList<CtClass>()
     input.forEach {
@@ -60,4 +60,9 @@ fun ClassPool.insertClassPath(input: Collection<TransformInput>) : List<CtClass>
     println("-----processed class count: ${allClass.size}")
     println("--------------------------")
     return allClass
+}
+
+fun String.compress(): String {
+    //todo 压缩
+    return this
 }
