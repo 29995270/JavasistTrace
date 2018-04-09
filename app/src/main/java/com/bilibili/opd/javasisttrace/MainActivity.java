@@ -2,7 +2,9 @@ package com.bilibili.opd.javasisttrace;
 
 import android.os.Bundle;
 import android.support.annotation.Nullable;
+import android.support.v4.os.TraceCompat;
 import android.support.v7.app.AppCompatActivity;
+import android.util.Log;
 import android.view.WindowManager;
 
 import com.bilibili.opd.tracer.core.annotation.TraceField;
@@ -22,13 +24,25 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         findViewById(R.id.root)
-                .setOnClickListener((view) -> publicMethod(new OutBean(random.nextInt(100), random.nextInt(100))));
+                .setOnClickListener((view) -> {
+                    TraceCompat.beginSection("onClick");
+                    publicMethod(new OutBean(random.nextInt(100), random.nextInt(100)));
+                    TraceCompat.endSection();
+                });
         findViewById(R.id.root)
                 .setOnDragListener((v, event) -> false);
 
         staticMethod(getWindowManager());
         publicMethod(new Bean());
         publicMethod(new OutBean(12, 21));
+
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < 10000; i++) {
+            publicMethod(new OutBean(random.nextInt(100), random.nextInt(100)));
+//            publicMethod(new Bean());
+        }
+        Log.e("AAA", "duration: " + (System.currentTimeMillis() - start));
+
     }
 
     @Override

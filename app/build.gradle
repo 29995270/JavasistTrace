@@ -35,7 +35,11 @@ android {
 
 tracer {
     tracePackageNames = ["com.bilibili.opd.javasisttrace"]
-    excludePackageNames = ["com.bilibili.opd.javasisttrace.donot"]
+    excludePackageNames = [
+            "com.bilibili.opd.javasisttrace.donot",
+            "com.bilibili.opd.javasisttrace.application",
+            "com.bilibili.opd.tracer.core"
+    ]
     excludeMethodSignature = [
             "donotTrace" : "(Ljava/lang/String;)V"
     ]
