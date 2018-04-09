@@ -27,4 +27,5 @@ dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     implementation "com.android.support:support-annotations:27.1.0"
+    implementation 'com.github.JCTools.JCTools:jctools-core:v2.1.2'
 }

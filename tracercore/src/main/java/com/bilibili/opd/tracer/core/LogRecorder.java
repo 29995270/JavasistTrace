@@ -5,7 +5,10 @@ import android.database.sqlite.SQLiteDatabase;
 import android.os.Environment;
 import android.support.annotation.Keep;
 
+import org.jctools.queues.MpscLinkedQueue;
+
 import java.io.File;
+import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -21,14 +24,14 @@ public class LogRecorder {
     private final Context context;
     private static LogRecorder INSTANCE;
 
-    private ConcurrentLinkedQueue<MethodTraceObj> queue = new ConcurrentLinkedQueue<>();
+    private MpscLinkedQueue<MethodTraceObj> queue = MpscLinkedQueue.newMpscLinkedQueue();
     private AtomicInteger wip = new AtomicInteger(0);
-    private static ExecutorService executorService;
+    private ExecutorService executorService;
+    private ArrayList<MethodTraceObj> buffer = new ArrayList<>(30);
 
     public static void init(Context context) {
         if (INSTANCE == null) {
             INSTANCE = new LogRecorder(context);
-            executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         }
     }
 
@@ -38,6 +41,7 @@ public class LogRecorder {
 
     private LogRecorder(Context context) {
         this.context = context.getApplicationContext();
+        executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     }
 
     /**
@@ -85,41 +89,56 @@ public class LogRecorder {
 //        }
 //    }
 
+    private void enqueue(MethodTraceObj traceObj) {
+        if (wip.compareAndSet(0, 1)) {
+            collect(traceObj);
+            if (wip.decrementAndGet() == 0) {
+                return;
+            }
+        } else {
+            queue.offer(traceObj);
+            if (wip.getAndIncrement() != 0) {
+                return;
+            }
+        }
+        do {
+            MethodTraceObj poll = queue.poll();
+            collect(poll);
+        } while (wip.decrementAndGet() != 0);
+    }
+
 //    private void enqueue(MethodTraceObj traceObj) {
-//        if (wip.compareAndSet(0, 1)) {
-//            executorService.execute(() -> write(traceObj));
-//            if (wip.decrementAndGet() == 0) {
-//                return;
-//            }
-//        } else {
-//            queue.offer(traceObj);
-//            if (wip.getAndIncrement() != 0) {
-//                return;
-//            }
+//        queue.offer(traceObj);
+//        if (wip.getAndIncrement() == 0) {
+//            do {
+//                 wip.set(1);
+//                MethodTraceObj obj;
+//                while ((obj = queue.poll()) != null) {
+//                    collect(obj);
+//                }
+//            } while (wip.decrementAndGet() != 0);
 //        }
-//        do {
-//            MethodTraceObj poll = queue.poll();
-//            executorService.execute(() -> write(traceObj));
-//        } while (wip.decrementAndGet() != 0);
 //    }
 
-    private void enqueue(MethodTraceObj traceObj) {
-        queue.offer(traceObj);
-        if (wip.getAndIncrement() == 0) {
-            do {
-                 wip.set(1);
-                MethodTraceObj obj;
-                while ((obj = queue.poll()) != null) {
-                    MethodTraceObj finalObj = obj;
-                    executorService.execute(() -> write(finalObj));
-                }
-            } while (wip.decrementAndGet() != 0);
+    private void collect(MethodTraceObj obj) {
+        buffer.add(obj);
+        if (buffer.size() >= 30) {
+            //flash
+            buffer.clear();
         }
     }
 
-    private void write(MethodTraceObj traceObj) {
+    private Thread writeThread = new Thread(() -> {
         SQLiteDatabase database = SQLiteDatabase.openOrCreateDatabase(Environment.getDataDirectory().getAbsolutePath() + File.separator + "bltrace.db", null);
-        database.execSQL("create table IF NOT EXISTS \"method\" (\"ID\" INTEGER PRIMARY KEY , \"STATIC\" INTEGER, \"T_NAME\" TEXT, \"TIME\" TEXT, \"METHOD_SIG\" TEXT, \"ARGS\" TEXT);");
+        database.execSQL("CREATE TABLE IF NOT EXISTS \"method\" (\"ID\" INTEGER PRIMARY KEY , \"STATIC\" INTEGER, \"T_NAME\" TEXT, \"TIME\" TEXT, \"METHOD_SIG\" TEXT, \"ARGS\" TEXT);");
+        if (queue.size() >= 50) {
+            queue.drain(e -> {
+
+            });
+        }
+    });
+
+    private void write(MethodTraceObj traceObj) {
     }
 
     public static class MethodTraceObj {
