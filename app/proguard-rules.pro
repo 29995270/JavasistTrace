@@ -19,6 +19,8 @@
 -allowaccessmodification
 -dontpreverify
 
+-keepattributes LineNumberTable
+
 # The remainder of this file is identical to the non-optimized version
 # of the Proguard configuration file (except that the other file has
 # flags to turn off optimization).
@@ -83,3 +85,5 @@
 -keepclasseswithmembers class * {
     @android.support.annotation.Keep <init>(...);
 }
+
+-dontwarn sun.misc.Unsafe

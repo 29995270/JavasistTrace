@@ -36,12 +36,12 @@ public class MainActivity extends AppCompatActivity {
         publicMethod(new Bean());
         publicMethod(new OutBean(12, 21));
 
-        long start = System.currentTimeMillis();
-        for (int i = 0; i < 10000; i++) {
-            publicMethod(new OutBean(random.nextInt(100), random.nextInt(100)));
-//            publicMethod(new Bean());
-        }
-        Log.e("AAA", "duration: " + (System.currentTimeMillis() - start));
+//        long start = System.currentTimeMillis();
+//        for (int i = 0; i < 10000; i++) {
+//            publicMethod(new OutBean(random.nextInt(100), random.nextInt(100)));
+////            publicMethod(new Bean());
+//        }
+//        Log.e("AAA", "duration: " + (System.currentTimeMillis() - start));
 
     }
 

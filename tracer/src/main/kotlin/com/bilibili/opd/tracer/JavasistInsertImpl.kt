@@ -47,12 +47,16 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
         outStream.close()
     }
 
-    private fun isTraceField(field: CtField) =
-            field.annotations.any {
-                "@com.bilibili.opd.tracer.core.annotation.TraceField" == it.toString()
-            }
+    private fun isTraceField(field: CtField) = false
+//            try {
+//                field.availableAnnotations.any {
+//                    "@com.bilibili.opd.tracer.core.annotation.TraceField" == it.toString()
+//                }
+//            } catch (e: Exception) {
+//                false
+//            }
 
-    private fun isPrimitiveType(ctClass: CtClass)= ctClass.isPrimitive
+    private fun isPrimitiveType(ctClass: CtClass) = ctClass.isPrimitive
 
     private fun isIdField(field: CtField) = field.name.endsWith("id", true) && (field.type.name == "int" || field.type.name == "long")
 
@@ -89,27 +93,34 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
         val returnType = ctMethod.returnType
         val returnTypeName = returnType.name //todo
 //        val args = getParamsStatement(ctClass, ctMethod)
-        val argsArrayList = getParamsStatements(ctClass, ctMethod)
+        val argsExp = getParamsStatement(ctClass, ctMethod)
 //        return """
 //                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue(
 //                    "${if (isStatic) "sm:" else "m:"}${ctMethod.longName.compress()}|" +
 //                    "p:$args");
 //                """.replace("""( \+ "")""".toRegex(), "")
-        return if (argsArrayList == null) {
+        val replace = """
+            $argsExp
+            com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${ctMethod.longName.compress()}", _trace_string);
             """
-                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${ctMethod.longName.compress()}");
-                """.replace("""( \+ "")""".toRegex(), "")
-        } else if (argsArrayList.size == 1) {
-            """
-                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${ctMethod.longName.compress()}", ${argsArrayList[0]});
-                """.replace("""( \+ "")""".toRegex(), "")
-        } else {
+        println(replace)
+        return replace
 
-            val paramStatement = "new String[]{${argsArrayList.joinToString()}}"
-            """
-                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${ctMethod.longName.compress()}", $paramStatement);
-                """.replace("""( \+ "")""".toRegex(), "")
-        }
+//        return if (argsArrayList == null) {
+//            """
+//                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${ctMethod.longName.compress()}");
+//                """.replace("""( \+ "")""".toRegex(), "")
+//        } else if (argsArrayList.size == 1) {
+//            """
+//                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${ctMethod.longName.compress()}", ${argsArrayList[0]});
+//                """.replace("""( \+ "")""".toRegex(), "")
+//        } else {
+//
+//            val paramStatement = "new String[]{${argsArrayList.joinToString()}}"
+//            """
+//                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${ctMethod.longName.compress()}", $paramStatement);
+//                """.replace("""( \+ "")""".toRegex(), "")
+//        }
 
     }
 
@@ -136,11 +147,11 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
         }
 
         return when {
-            //skip short method(may inline by proguard)
+        //skip short method(may inline by proguard)
             ctBehavior.methodInfo.codeAttribute.codeLength <= 8 -> false
             ctBehavior.methodInfo.isStaticInitializer -> false
             ctBehavior.methodInfo.isConstructor -> false
-            // synthetic 方法暂时不aop 比如AsyncTask 会生成一些同名synthetic方法,对synthetic 以及private的方法也插入的代码，主要是针对lambda
+        // synthetic 方法暂时不aop 比如AsyncTask 会生成一些同名synthetic方法,对synthetic 以及private的方法也插入的代码，主要是针对lambda
             ctBehavior.modifiers and AccessFlag.SYNTHETIC != 0 && !AccessFlag.isPrivate(ctBehavior.modifiers) -> false
             ctBehavior.modifiers and AccessFlag.ABSTRACT != 0 -> false
             ctBehavior.modifiers and AccessFlag.NATIVE != 0 -> false
@@ -151,50 +162,88 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
 
     private fun getParamsStatement(ctClass: CtClass, ctMethod: CtMethod): String {
         if (ctMethod.parameterTypes.isEmpty()) {
-            return "null"
+            return "empty"
         }
         val stringBuilder = StringBuilder()
         return with(stringBuilder) {
+            append("StringBuilder _trace_builder = new StringBuilder();")
+            var handleParamsCount = 0
             ctMethod.parameterTypes.forEachIndexed { index, paramType ->
-                val paramStatement: StringBuilder = StringBuilder()
-
                 if (isPrimitiveType(paramType)) {//基本类型，直接打印
-                    paramStatement.append("""";" + $${index + 1}""")
+                    handleParamsCount++
+                    append("""_trace_builder.append(";")""")
+                    append(""".append($${index + 1});""")
                 } else if (isCollectionType(paramType)) {//集合类型，直接打印长度
-                    paramStatement.append("""";" + $${index + 1}.size()""")
+                    handleParamsCount++
+                    append("""_trace_builder.append(";")""")
+                    append(""".append($${index + 1} == null ? "null" : $${index + 1}.size());""")
                 } else if (isStringType(paramType)) {//string 类型，直接打印长度
-                    paramStatement.append("""";" + $${index + 1}.length""")
+                    handleParamsCount++
+                    append("""_trace_builder.append(";")""")
+                    append(""".append($${index + 1} == null ? "null" : $${index + 1}.length());""")
                 } else {
-                    paramStatement.append(';')
+                    handleParamsCount++
+                    append("""_trace_builder.append(";");""")
+                    append("""
+                        if ($${index + 1} == null) {
+                            _trace_builder.append("null");
+                        } else {
+                    """)
+                    var tracedFieldCount = 0
                     if (isNeedInsertClass(paramType.name)) {
                         for (field in paramType.declaredFields) {
-                            if (!field.visibleFrom(ctClass)) continue
+                            if (!field.visibleFrom(ctClass) || field.modifiers and AccessFlag.STATIC != 0) continue
                             when {
                                 isTraceField(field) -> {
-                                    println("print params ${index + 1}.${field.name}")
-                                    paramStatement.append(""",$${index + 1}.${field.name}=" + $${index + 1}.${field.name} + """")
+                                    tracedFieldCount++
+                                    append("""_trace_builder.append(",")""")
+                                    append(""".append("$${index + 1}.${field.name}=")""")
+                                    append(""".append($${index + 1}.${field.name});""")
                                 }
-                                isIdField(field) -> {
-                                    paramStatement.append(""",$${index + 1}.${field.name}=" + $${index + 1}.${field.name} + """")
+                                isStringType(field.type) -> {
+                                    tracedFieldCount++
+                                    append("""_trace_builder.append(",")""")
+                                    append(""".append("$${index + 1}.${field.name}=");""")
+                                    append("""
+                                        if ($${index + 1}.${field.name} == null) {
+                                            _trace_builder.append("null");
+                                        } else {
+                                            _trace_builder.append($${index + 1}.${field.name}.length());
+                                        }
+                                    """)
+                                }
+                                isPrimitiveType(field.type) -> {
+                                    tracedFieldCount++
+                                    append("""_trace_builder.append(",")""")
+                                    append(""".append("$${index + 1}.${field.name}=")""")
+                                    append(""".append($${index + 1}.${field.name});""")
                                 }
                                 isCollectionType(field.type) -> {
-                                    paramStatement.append("""" + ($${index + 1}.${field.name} == null ? ",$${index + 1}.${field.name}=null" : (",$${index + 1}.${field.name}.size=" + $${index + 1}.${field.name}.size())) + """")
+                                    tracedFieldCount++
+                                    append("""_trace_builder.append(",")""")
+                                    append(""".append("$${index + 1}.${field.name}=");""")
+                                    append("""
+                                        if ($${index + 1}.${field.name} == null) {
+                                            _trace_builder.append("null");
+                                        } else {
+                                            _trace_builder.append($${index + 1}.${field.name}.size());
+                                        }
+                                    """)
                                 }
                             }
                         }
                     }
-                    if (paramStatement.length == 1) {
-                        paramStatement.append('o')
+                    if (tracedFieldCount == 0) {
+                        append("""
+                                _trace_builder.append("obj");
+                            }
+                        """)
+                    } else {
+                        append("}")
                     }
                 }
-                if (paramStatement.startsWith(";")) paramStatement.deleteCharAt(0)
-                if (paramStatement.startsWith(",")) paramStatement.deleteCharAt(0)
-                if (index == 0) {
-                    append("""" + ($${index + 1} == null ? "null" : "$paramStatement") + """")
-                } else {
-                    append("""" + ($${index + 1} == null ? ";null" : "$paramStatement") + """")
-                }
             }
+            append("String _trace_string = _trace_builder.toString();")
             toString()
         }
     }
@@ -212,9 +261,10 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
             } else if (isCollectionType(paramType)) {//集合类型，直接打印长度
                 statements.add("""$${index + 1} == null ? "$${index + 1}:null" : "$${index + 1}.size:" + $${index + 1}.size()""")
             } else if (isStringType(paramType)) {//string 类型，直接打印长度
-                statements.add("""$${index + 1} == null ? "$${index + 1}:null" : "$${index + 1}.len:" + $${index + 1}.length""")
+                statements.add("""$${index + 1} == null ? "$${index + 1}:null" : "$${index + 1}.len:" + $${index + 1}.length()""")
             } else {
                 if (isNeedInsertClass(paramType.name)) {
+                    statements.add("""$${index + 1} == null ? "$${index + 1}:null" : "$${index + 1}:o"""")
                     for (field in paramType.declaredFields) {
                         if (!field.visibleFrom(ctClass) || field.modifiers and AccessFlag.STATIC != 0) continue
                         when {
@@ -222,7 +272,7 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
                                 statements.add(""""$${index + 1}.${field.name}:" + $${index + 1}.${field.name}""")
                             }
                             isStringType(field.type) -> {
-                                statements.add("""$${index + 1}.${field.name} == null ? "$${index + 1}.${field.name}:null" : "$${index + 1}..${field.name}.len:" + $${index + 1}.${field.name}.length""")
+                                statements.add("""$${index + 1}.${field.name} == null ? "$${index + 1}.${field.name}:null" : "$${index + 1}..${field.name}.len:" + $${index + 1}.${field.name}.length()""")
                             }
 //                            isIdField(field) -> {
 //                                statements.add(""""$${index + 1}.${field.name}:" + $${index + 1}.${field.name}""")

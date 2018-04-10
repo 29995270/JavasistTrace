@@ -1,11 +1,10 @@
 package com.bilibili.opd.tracer.core;
 
+import android.content.ContentValues;
 import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import android.os.Environment;
 import android.support.annotation.Keep;
-
-import org.jctools.queues.MpscLinkedQueue;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -24,10 +23,10 @@ public class LogRecorder {
     private final Context context;
     private static LogRecorder INSTANCE;
 
-    private MpscLinkedQueue<MethodTraceObj> queue = MpscLinkedQueue.newMpscLinkedQueue();
+    private ConcurrentLinkedQueue<MethodTraceObj> queue = new ConcurrentLinkedQueue<>();
     private AtomicInteger wip = new AtomicInteger(0);
-    private ExecutorService executorService;
     private ArrayList<MethodTraceObj> buffer = new ArrayList<>(30);
+//    private SQLiteDatabase database;
 
     public static void init(Context context) {
         if (INSTANCE == null) {
@@ -41,40 +40,23 @@ public class LogRecorder {
 
     private LogRecorder(Context context) {
         this.context = context.getApplicationContext();
-        executorService = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     }
 
     /**
      * params is empty
      */
     public void enqueue(boolean isStatic, String methodSignature) {
-        enqueue(isStatic, methodSignature, null, null);
+        enqueue(isStatic, methodSignature, null);
     }
 
-    /**
-     * single param statement
-     */
     public void enqueue(boolean isStatic, String methodSignature, String singleParam) {
-        enqueue(isStatic, methodSignature, singleParam, null);
-    }
-
-    /**
-     * multi param statements
-     */
-    public void enqueue(boolean isStatic, String methodSignature, String[] paramExps) {
-        enqueue(isStatic, methodSignature, null, paramExps);
-    }
-
-    private void enqueue(boolean isStatic, String methodSignature, String singleParam, String[] paramExps) {
         long time = System.nanoTime();
         String name = Thread.currentThread().getName();
         MethodTraceObj traceObj;
-        if (singleParam == null && paramExps == null) {
+        if (singleParam == null) {
             traceObj = new MethodTraceObj(isStatic, time, name, methodSignature);
-        } else if (paramExps == null) {
-            traceObj = new MethodTraceObj(isStatic, time, name, methodSignature, singleParam);
         } else {
-            traceObj = new MethodTraceObj(isStatic, time, name, methodSignature, paramExps);
+            traceObj = new MethodTraceObj(isStatic, time, name, methodSignature, singleParam);
         }
         enqueue(traceObj);
     }
@@ -124,21 +106,37 @@ public class LogRecorder {
         buffer.add(obj);
         if (buffer.size() >= 30) {
             //flash
+//            if (database == null) {
+//                File directory = Environment.getDataDirectory();
+//                if (!directory.exists()) {
+//                    directory.mkdirs();
+//                }
+//                database = SQLiteDatabase.openOrCreateDatabase(Environment.getDataDirectory().getAbsolutePath() + File.separator + "bltrace.db", null);
+//                database.execSQL("CREATE TABLE IF NOT EXISTS method (_ID INTEGER PRIMARY KEY , STATIC INTEGER, T_NAME TEXT, TIME TEXT, METHOD_SIG TEXT, ARGS TEXT);");
+//            }
+//            database.beginTransaction();
+            for (MethodTraceObj traceObj : buffer) {
+                ContentValues contentValues = new ContentValues();
+                contentValues.put("STATIC", traceObj.isStatic ? 1 : 0);
+                contentValues.put("T_NAME", traceObj.threadName);
+                contentValues.put("TIME", String.valueOf(traceObj.timeStamp));
+                contentValues.put("METHOD_SIG", traceObj.methodSignature);
+                if (traceObj.singleParamStatement != null) {
+                    contentValues.put("ARGS", traceObj.singleParamStatement);
+                } else if (traceObj.multiParamStatements != null) {
+                    StringBuilder builder = new StringBuilder();
+                    for (String statement : traceObj.multiParamStatements) {
+                        builder.append(statement);
+                        builder.append(",");
+                    }
+                    builder.deleteCharAt(builder.length() - 1);
+                    contentValues.put("ARGS", builder.toString());
+                }
+//                database.insert("method", null, contentValues);
+            }
+//            database.endTransaction();
             buffer.clear();
         }
-    }
-
-    private Thread writeThread = new Thread(() -> {
-        SQLiteDatabase database = SQLiteDatabase.openOrCreateDatabase(Environment.getDataDirectory().getAbsolutePath() + File.separator + "bltrace.db", null);
-        database.execSQL("CREATE TABLE IF NOT EXISTS \"method\" (\"ID\" INTEGER PRIMARY KEY , \"STATIC\" INTEGER, \"T_NAME\" TEXT, \"TIME\" TEXT, \"METHOD_SIG\" TEXT, \"ARGS\" TEXT);");
-        if (queue.size() >= 50) {
-            queue.drain(e -> {
-
-            });
-        }
-    });
-
-    private void write(MethodTraceObj traceObj) {
     }
 
     public static class MethodTraceObj {
@@ -159,11 +157,6 @@ public class LogRecorder {
         public MethodTraceObj(boolean isStatic, long timeStamp, String threadName, String methodSignature, String singleParamStatement) {
             this(isStatic, timeStamp, threadName, methodSignature);
             this.singleParamStatement = singleParamStatement;
-        }
-
-        public MethodTraceObj(boolean isStatic, long timeStamp, String threadName, String methodSignature, String[] multiParamStatements) {
-            this(isStatic, timeStamp, threadName, methodSignature);
-            this.multiParamStatements = multiParamStatements;
         }
     }
 }
