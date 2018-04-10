@@ -42,6 +42,10 @@ public class LogRecorder {
         this.context = context.getApplicationContext();
     }
 
+    public boolean isEnable() {
+        return false;
+    }
+
     /**
      * params is empty
      */

@@ -100,8 +100,10 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
 //                    "p:$args");
 //                """.replace("""( \+ "")""".toRegex(), "")
         val replace = """
-            $argsExp
-            com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${ctMethod.longName.compress()}", _trace_string);
+            if (com.bilibili.opd.tracer.core.LogRecorder.getInstance().isEnable()) {
+                $argsExp
+                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${ctMethod.longName.compress()}", _trace_string);
+            }
             """
         println(replace)
         return replace

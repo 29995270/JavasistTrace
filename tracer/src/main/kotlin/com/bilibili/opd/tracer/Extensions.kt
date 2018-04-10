@@ -64,6 +64,23 @@ fun ClassPool.insertClassPath(input: Collection<TransformInput>): List<CtClass> 
     return allClass
 }
 
+
+//0,1,2,3,4,5,6,7,8,9,a,b,c,d,e,f,g,h,i,j,k....X,Y,Z
+//10 + 26 + 26
+fun Int.toObfuscate(): String {
+    val result = this / 62
+    val result2 = this % 62
+    return if (result == 0) {
+        when(this) {
+            in 0..9 -> this.toString()
+            in 10..35 -> ('a' + (this - 10)).toString()
+            else -> ('A' + (this - 36)).toString()
+        }
+    } else {
+        result.toObfuscate() + result2.toObfuscate()
+    }
+}
+
 var start = 0
 val map = HashMap<String, String>()
 
