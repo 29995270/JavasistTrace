@@ -6,5 +6,6 @@ package com.bilibili.opd.tracer.extension
 open class TracerExtension(
         var tracePackageNames: List<String> = emptyList(),
         var excludePackageNames: List<String> = emptyList(),
-        var excludeMethodSignature: Map<String, String> = emptyMap()
+        var excludeMethodSignature: Map<String, String> = emptyMap(),
+        var enableObfuscate: Boolean = true
 )

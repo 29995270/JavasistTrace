@@ -17,7 +17,12 @@ import java.util.zip.GZIPOutputStream
 /**
  * Created by wq on 2018/3/8.
  */
+
+private const val MAP_PATH = "/outputs/tracer/methodsMap.json"
+
 class TracerTransform(private val project: Project) : Transform() {
+
+
     override fun getName() = "Tracer"
 
     override fun getInputTypes() = TransformManager.CONTENT_CLASS
@@ -52,30 +57,11 @@ class TracerTransform(private val project: Project) : Transform() {
             println("tracePackageNames: ${tracer.tracePackageNames}")
             println("excludePackageNames: ${tracer.excludePackageNames}")
             println("excludeMethodNames: ${tracer.excludeMethodSignature}")
-            val insertCodeStrategy : InsertCodeStrategy = JavasistInsertImpl(tracer)
+            val obfuscator = WordObfuscator()
+            val insertCodeStrategy : InsertCodeStrategy = JavasistInsertImpl(tracer, obfuscator)
             println("----${jarFile.absolutePath}")
             insertCodeStrategy.insertCode(box, jarFile)
+            obfuscator.outputMap(project.buildDir.path + MAP_PATH)
         }
-    }
-
-    private fun writeMap2File(map: Map<String, Int>, path: String) {
-        val file = File(project.buildDir.path + path)
-        if (file.exists().not() && (file.parentFile.mkdirs().not() || !file.createNewFile())) {
-
-        }
-
-        val fileOut = FileOutputStream(file)
-        val byteOut = ByteArrayOutputStream()
-        val objectOut = ObjectOutputStream(byteOut)
-        objectOut.writeObject(map)
-
-        val gzip = GZIPOutputStream(fileOut)
-        gzip.write(byteOut.toByteArray())
-        objectOut.close()
-        gzip.flush()
-        gzip.close()
-        fileOut.flush()
-        fileOut.close()
-
     }
 }

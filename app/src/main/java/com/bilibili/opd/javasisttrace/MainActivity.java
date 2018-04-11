@@ -9,6 +9,9 @@ import android.view.WindowManager;
 
 import com.bilibili.opd.tracer.core.annotation.TraceField;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 
 /**
@@ -43,12 +46,14 @@ public class MainActivity extends AppCompatActivity {
 //        }
 //        Log.e("AAA", "duration: " + (System.currentTimeMillis() - start));
 
+        listMethod(Collections.emptyList());
     }
 
     @Override
     protected void onResume() {
         super.onResume();
         publicMethod(new Bean());
+        listMethod(Collections.emptyList());
     }
 
     private static void staticMethod(WindowManager windowManager) {
@@ -63,6 +68,11 @@ public class MainActivity extends AppCompatActivity {
     public void publicMethod(OutBean b) {
         System.out.println(b.getFieldA());
         System.out.println(b.getFieldB());
+    }
+
+    public void listMethod(List<OutBean> list) {
+        System.out.println(list.size());
+        System.out.println(list.size());
     }
 
     public void donotTrace(String a) {

@@ -11,7 +11,8 @@ import java.util.jar.JarOutputStream
 /**
  * Created by wq on 2018/3/25.
  */
-class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(tracerExtension) {
+class JavasistInsertImpl(tracerExtension: TracerExtension, obfuscator: WordObfuscator) : InsertCodeStrategy(tracerExtension, obfuscator) {
+
     override fun insertCode(box: List<CtClass>, jarFile: File) {
         val outStream = JarOutputStream(FileOutputStream(jarFile))
         for (ctClass in box) {
@@ -99,12 +100,21 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
 //                    "${if (isStatic) "sm:" else "m:"}${ctMethod.longName.compress()}|" +
 //                    "p:$args");
 //                """.replace("""( \+ "")""".toRegex(), "")
-        val replace = """
+        val replace : String
+        if ("empty" == argsExp) {
+            replace = """
             if (com.bilibili.opd.tracer.core.LogRecorder.getInstance().isEnable()) {
-                $argsExp
-                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${ctMethod.longName.compress()}", _trace_string);
+                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${if (tracerExtension.enableObfuscate) obfuscator.obfuscate(ctMethod.longName) else ctMethod.longName}", "empty");
             }
             """
+        } else {
+            replace = """
+            if (com.bilibili.opd.tracer.core.LogRecorder.getInstance().isEnable()) {
+                $argsExp
+                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${if (tracerExtension.enableObfuscate) obfuscator.obfuscate(ctMethod.longName) else ctMethod.longName}", _trace_string);
+            }
+            """
+        }
         println(replace)
         return replace
 
@@ -173,19 +183,31 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
             ctMethod.parameterTypes.forEachIndexed { index, paramType ->
                 if (isPrimitiveType(paramType)) {//基本类型，直接打印
                     handleParamsCount++
-                    append("""_trace_builder.append(";")""")
-                    append(""".append($${index + 1});""")
+                    if (index != 0) {
+                        append("""_trace_builder.append(";")""")
+                        append(""".append($${index + 1});""")
+                    } else {
+                        append("""_trace_builder.append($${index + 1});""")
+                    }
                 } else if (isCollectionType(paramType)) {//集合类型，直接打印长度
                     handleParamsCount++
-                    append("""_trace_builder.append(";")""")
-                    append(""".append($${index + 1} == null ? "null" : $${index + 1}.size());""")
+                    if (index != 0) {
+                        append("""_trace_builder.append(";")""")
+                        append(""".append($${index + 1} == null ? "null" : String.valueOf($${index + 1}.size()));""")
+                    } else {
+                        append("""_trace_builder.append($${index + 1} == null ? "null" : String.valueOf($${index + 1}.size()));""")
+                    }
                 } else if (isStringType(paramType)) {//string 类型，直接打印长度
                     handleParamsCount++
-                    append("""_trace_builder.append(";")""")
-                    append(""".append($${index + 1} == null ? "null" : $${index + 1}.length());""")
+                    if (index != 0) {
+                        append("""_trace_builder.append(";")""")
+                        append(""".append($${index + 1} == null ? "null" : String.valueOf($${index + 1}.length()));""")
+                    } else {
+                        append("""_trace_builder.append($${index + 1} == null ? "null" : String.valueOf($${index + 1}.length()));""")
+                    }
                 } else {
                     handleParamsCount++
-                    append("""_trace_builder.append(";");""")
+                    if (index != 0) append("""_trace_builder.append(";");""")
                     append("""
                         if ($${index + 1} == null) {
                             _trace_builder.append("null");
@@ -197,15 +219,23 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
                             if (!field.visibleFrom(ctClass) || field.modifiers and AccessFlag.STATIC != 0) continue
                             when {
                                 isTraceField(field) -> {
+                                    if (tracedFieldCount != 0) {
+                                        append("""_trace_builder.append(",")""")
+                                        append(""".append("$${index + 1}.${field.name}=")""")
+                                        append(""".append($${index + 1}.${field.name});""")
+                                    } else {
+                                        append("""_trace_builder.append("$${index + 1}.${field.name}=")""")
+                                        append(""".append($${index + 1}.${field.name});""")
+                                    }
                                     tracedFieldCount++
-                                    append("""_trace_builder.append(",")""")
-                                    append(""".append("$${index + 1}.${field.name}=")""")
-                                    append(""".append($${index + 1}.${field.name});""")
                                 }
                                 isStringType(field.type) -> {
-                                    tracedFieldCount++
-                                    append("""_trace_builder.append(",")""")
-                                    append(""".append("$${index + 1}.${field.name}=");""")
+                                    if (tracedFieldCount != 0) {
+                                        append("""_trace_builder.append(",")""")
+                                        append(""".append("$${index + 1}.${field.name}=");""")
+                                    } else {
+                                        append("""_trace_builder.append("$${index + 1}.${field.name}=");""")
+                                    }
                                     append("""
                                         if ($${index + 1}.${field.name} == null) {
                                             _trace_builder.append("null");
@@ -213,17 +243,25 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
                                             _trace_builder.append($${index + 1}.${field.name}.length());
                                         }
                                     """)
+                                    tracedFieldCount++
                                 }
                                 isPrimitiveType(field.type) -> {
-                                    tracedFieldCount++
-                                    append("""_trace_builder.append(",")""")
-                                    append(""".append("$${index + 1}.${field.name}=")""")
+                                    if (tracedFieldCount != 0) {
+                                        append("""_trace_builder.append(",")""")
+                                        append(""".append("$${index + 1}.${field.name}=")""")
+                                    } else {
+                                        append("""_trace_builder.append("$${index + 1}.${field.name}=")""")
+                                    }
                                     append(""".append($${index + 1}.${field.name});""")
+                                    tracedFieldCount++
                                 }
                                 isCollectionType(field.type) -> {
-                                    tracedFieldCount++
-                                    append("""_trace_builder.append(",")""")
-                                    append(""".append("$${index + 1}.${field.name}=");""")
+                                    if (tracedFieldCount != 0) {
+                                        append("""_trace_builder.append(",")""")
+                                        append(""".append("$${index + 1}.${field.name}=");""")
+                                    } else {
+                                        append("""_trace_builder.append("$${index + 1}.${field.name}=");""")
+                                    }
                                     append("""
                                         if ($${index + 1}.${field.name} == null) {
                                             _trace_builder.append("null");
@@ -231,6 +269,7 @@ class JavasistInsertImpl(tracerExtension: TracerExtension) : InsertCodeStrategy(
                                             _trace_builder.append($${index + 1}.${field.name}.size());
                                         }
                                     """)
+                                    tracedFieldCount++
                                 }
                             }
                         }

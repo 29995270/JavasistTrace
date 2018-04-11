@@ -1,16 +1,10 @@
 package com.bilibili.opd.tracer.core;
 
-import android.content.ContentValues;
 import android.content.Context;
-import android.database.sqlite.SQLiteDatabase;
-import android.os.Environment;
 import android.support.annotation.Keep;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -23,9 +17,9 @@ public class LogRecorder {
     private final Context context;
     private static LogRecorder INSTANCE;
 
-    private ConcurrentLinkedQueue<MethodTraceObj> queue = new ConcurrentLinkedQueue<>();
+    private ConcurrentLinkedQueue<TraceObj> queue = new ConcurrentLinkedQueue<>();
     private AtomicInteger wip = new AtomicInteger(0);
-    private ArrayList<MethodTraceObj> buffer = new ArrayList<>(30);
+    private ArrayList<TraceObj> buffer = new ArrayList<>(50);
 //    private SQLiteDatabase database;
 
     public static void init(Context context) {
@@ -43,7 +37,7 @@ public class LogRecorder {
     }
 
     public boolean isEnable() {
-        return false;
+        return true;
     }
 
     /**
@@ -56,13 +50,7 @@ public class LogRecorder {
     public void enqueue(boolean isStatic, String methodSignature, String singleParam) {
         long time = System.nanoTime();
         String name = Thread.currentThread().getName();
-        MethodTraceObj traceObj;
-        if (singleParam == null) {
-            traceObj = new MethodTraceObj(isStatic, time, name, methodSignature);
-        } else {
-            traceObj = new MethodTraceObj(isStatic, time, name, methodSignature, singleParam);
-        }
-        enqueue(traceObj);
+        enqueue(TraceObj.obtain(isStatic, time, name, methodSignature, singleParam));
     }
 
 //    private void enqueue(MethodTraceObj traceObj) {
@@ -75,7 +63,7 @@ public class LogRecorder {
 //        }
 //    }
 
-    private void enqueue(MethodTraceObj traceObj) {
+    private void enqueue(TraceObj traceObj) {
         if (wip.compareAndSet(0, 1)) {
             collect(traceObj);
             if (wip.decrementAndGet() == 0) {
@@ -88,7 +76,7 @@ public class LogRecorder {
             }
         }
         do {
-            MethodTraceObj poll = queue.poll();
+            TraceObj poll = queue.poll();
             collect(poll);
         } while (wip.decrementAndGet() != 0);
     }
@@ -106,61 +94,13 @@ public class LogRecorder {
 //        }
 //    }
 
-    private void collect(MethodTraceObj obj) {
+    private void collect(TraceObj obj) {
         buffer.add(obj);
-        if (buffer.size() >= 30) {
-            //flash
-//            if (database == null) {
-//                File directory = Environment.getDataDirectory();
-//                if (!directory.exists()) {
-//                    directory.mkdirs();
-//                }
-//                database = SQLiteDatabase.openOrCreateDatabase(Environment.getDataDirectory().getAbsolutePath() + File.separator + "bltrace.db", null);
-//                database.execSQL("CREATE TABLE IF NOT EXISTS method (_ID INTEGER PRIMARY KEY , STATIC INTEGER, T_NAME TEXT, TIME TEXT, METHOD_SIG TEXT, ARGS TEXT);");
-//            }
-//            database.beginTransaction();
-            for (MethodTraceObj traceObj : buffer) {
-                ContentValues contentValues = new ContentValues();
-                contentValues.put("STATIC", traceObj.isStatic ? 1 : 0);
-                contentValues.put("T_NAME", traceObj.threadName);
-                contentValues.put("TIME", String.valueOf(traceObj.timeStamp));
-                contentValues.put("METHOD_SIG", traceObj.methodSignature);
-                if (traceObj.singleParamStatement != null) {
-                    contentValues.put("ARGS", traceObj.singleParamStatement);
-                } else if (traceObj.multiParamStatements != null) {
-                    StringBuilder builder = new StringBuilder();
-                    for (String statement : traceObj.multiParamStatements) {
-                        builder.append(statement);
-                        builder.append(",");
-                    }
-                    builder.deleteCharAt(builder.length() - 1);
-                    contentValues.put("ARGS", builder.toString());
-                }
-//                database.insert("method", null, contentValues);
+        if (buffer.size() >= 50) {
+            for (TraceObj traceObj : buffer) {
+                traceObj.recycle();
             }
-//            database.endTransaction();
             buffer.clear();
-        }
-    }
-
-    public static class MethodTraceObj {
-        public boolean isStatic;
-        public long timeStamp;
-        public String threadName;
-        public String methodSignature;
-        public String singleParamStatement;
-        public String[] multiParamStatements;
-
-        public MethodTraceObj(boolean isStatic, long timeStamp, String threadName, String methodSignature) {
-            this.isStatic = isStatic;
-            this.timeStamp = timeStamp;
-            this.threadName = threadName;
-            this.methodSignature = methodSignature;
-        }
-
-        public MethodTraceObj(boolean isStatic, long timeStamp, String threadName, String methodSignature, String singleParamStatement) {
-            this(isStatic, timeStamp, threadName, methodSignature);
-            this.singleParamStatement = singleParamStatement;
         }
     }
 }

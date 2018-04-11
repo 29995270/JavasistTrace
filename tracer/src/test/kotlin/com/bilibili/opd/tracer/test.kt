@@ -11,4 +11,14 @@ class PluginText {
         assert(3846.toObfuscate() == "001")
         assert(3907.toObfuscate() == "010")
     }
+
+    @Test
+    fun obfuscateMethodName() {
+        val wordObfuscator = WordObfuscator()
+
+        val s = wordObfuscator.obfuscate("com.bilibili.music.MainActivity.onCreate(android.binder.Bunder\$abc)")
+        val s2 = wordObfuscator.obfuscate("com.bilibili.music.MainActivity.onCreate()")
+        val s3 = wordObfuscator.obfuscate("com.bilibili.music.MainActivity.onCreate(int)")
+        print(s)
+    }
 }
