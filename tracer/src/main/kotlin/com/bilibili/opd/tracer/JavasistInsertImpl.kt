@@ -143,8 +143,9 @@ class JavasistInsertImpl(tracerExtension: TracerExtension, obfuscator: WordObfus
 
             //方法过滤
             for ((methodName, signature) in tracerExtension.excludeMethodSignature) {
-                println("ctBehavior.signature : ${ctBehavior.signature}")
-                if (ctBehavior.signature == signature && ctBehavior.name == methodName) {
+                println("方法过滤 ctBehavior.signature : ${ctBehavior.signature}")
+                println("方法过滤 ctBehavior.longName : ${ctBehavior.longName}")
+                if (ctBehavior.signature == signature && methodName.toRegex().matches(ctBehavior.longName)) {
                     return false
                 }
             }

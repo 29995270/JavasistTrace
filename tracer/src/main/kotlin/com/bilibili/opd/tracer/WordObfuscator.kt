@@ -18,12 +18,16 @@ class WordObfuscator {
         }
 
         var dividerConsumeCount = 0;
-        return statement.split('.', '(', ')', '$', ',').filter { it.isNotEmpty() }.mapIndexed { _, s ->
+        return statement.split('.', '(', ')', '$', ',').mapIndexed { _, s ->
             map[s] ?: run{
-                val toObfuscate = count.toObfuscate()
-                count ++
-                map[s] = toObfuscate
-                toObfuscate
+                if (s.isEmpty()) {
+                    s
+                } else {
+                    val toObfuscate = count.toObfuscate()
+                    count ++
+                    map[s] = toObfuscate
+                    toObfuscate
+                }
             }
 
         }.reduce { acc, s ->

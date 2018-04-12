@@ -37,6 +37,10 @@ class TracerTransform(private val project: Project) : Transform() {
         transformInvocation?.run {
             val tracer = project.extensions.getByType(TracerExtension::class.java)
 
+            tracer.excludePackageNames = mutableListOf(
+                    "com.bilibili.opd.tracer.core"
+            ).apply { addAll(tracer.excludePackageNames) }
+
             outputProvider.deleteAll()
             val jarFile = outputProvider.getContentLocation("main", outputTypes, scopes, Format.JAR)
             if (jarFile.parentFile.exists().not()) {

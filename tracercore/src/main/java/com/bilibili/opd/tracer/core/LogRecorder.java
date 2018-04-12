@@ -1,7 +1,12 @@
 package com.bilibili.opd.tracer.core;
 
+import android.content.ContentValues;
 import android.content.Context;
+import android.database.sqlite.SQLiteDatabase;
 import android.support.annotation.Keep;
+import android.util.Log;
+
+import com.bilibili.opd.tracer.core.store.LogDBOpenHelper;
 
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -20,7 +25,9 @@ public class LogRecorder {
     private ConcurrentLinkedQueue<TraceObj> queue = new ConcurrentLinkedQueue<>();
     private AtomicInteger wip = new AtomicInteger(0);
     private ArrayList<TraceObj> buffer = new ArrayList<>(50);
-//    private SQLiteDatabase database;
+    private static LogDBOpenHelper openHelper;
+    private SQLiteDatabase database;
+    //    private SQLiteDatabase database;
 
     public static void init(Context context) {
         if (INSTANCE == null) {
@@ -97,10 +104,29 @@ public class LogRecorder {
     private void collect(TraceObj obj) {
         buffer.add(obj);
         if (buffer.size() >= 50) {
-            for (TraceObj traceObj : buffer) {
-                traceObj.recycle();
+            long startTime = System.currentTimeMillis();
+            if (openHelper == null) {
+                openHelper = new LogDBOpenHelper(context, LogDBOpenHelper.DB_NAME, null, LogDBOpenHelper.VERSION);
+                database = openHelper.getWritableDatabase();
+            }
+
+            database.beginTransaction();
+            try {
+                for (TraceObj traceObj : buffer) {
+                    ContentValues contentValues = new ContentValues();
+                    contentValues.put(LogDBOpenHelper.COLUMN_T_NAME, traceObj.threadName);
+                    contentValues.put(LogDBOpenHelper.COLUMN_TIME, String.valueOf(traceObj.timeStamp));
+                    contentValues.put(LogDBOpenHelper.COLUMN_METHOD, traceObj.methodSignature);
+                    contentValues.put(LogDBOpenHelper.COLUMN_PARAMS, traceObj.paramStatement);
+                    database.insert(LogDBOpenHelper.TABLE_NAME, null, contentValues);
+                    traceObj.recycle();
+                }
+                database.setTransactionSuccessful();
+            } finally {
+                database.endTransaction();
             }
             buffer.clear();
+            Log.e("AAA", "db duration:" + (System.currentTimeMillis() - startTime));
         }
     }
 }
