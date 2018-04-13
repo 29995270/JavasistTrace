@@ -1,16 +1,18 @@
 package com.bilibili.opd.tracer.core;
 
-import android.content.ContentValues;
 import android.content.Context;
-import android.database.sqlite.SQLiteDatabase;
 import android.support.annotation.Keep;
 import android.util.Log;
 
-import com.bilibili.opd.tracer.core.store.LogDBOpenHelper;
+import com.bilibili.opd.tracer.core.store.DBLogStorage;
+import com.bilibili.opd.tracer.core.store.LogStorage;
 
-import java.util.ArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import rx.Observable;
+import rx.schedulers.Schedulers;
 
 /**
  * Created by wq on 2018/4/8.
@@ -21,13 +23,10 @@ public class LogRecorder {
 
     private final Context context;
     private static LogRecorder INSTANCE;
+    private final LogStorage logStorage;
 
     private ConcurrentLinkedQueue<TraceObj> queue = new ConcurrentLinkedQueue<>();
     private AtomicInteger wip = new AtomicInteger(0);
-    private ArrayList<TraceObj> buffer = new ArrayList<>(50);
-    private static LogDBOpenHelper openHelper;
-    private SQLiteDatabase database;
-    //    private SQLiteDatabase database;
 
     public static void init(Context context) {
         if (INSTANCE == null) {
@@ -41,23 +40,31 @@ public class LogRecorder {
 
     private LogRecorder(Context context) {
         this.context = context.getApplicationContext();
+        logStorage = new DBLogStorage(context);
+        Observable.interval(10, 10, TimeUnit.SECONDS, Schedulers.io())
+                .onBackpressureDrop()
+                .subscribe((along) -> {
+                    long startTime = System.currentTimeMillis();
+                    TraceObj obj;
+                    while ((obj = queue.poll()) != null) {
+                        logStorage.collectStore(obj);
+                    }
+                    logStorage.flush();
+                    Log.e("AAA", "db duration:" + (System.currentTimeMillis() - startTime));
+                }, throwable -> {
+
+                });
     }
 
     public boolean isEnable() {
         return true;
     }
 
-    /**
-     * params is empty
-     */
-    public void enqueue(boolean isStatic, String methodSignature) {
-        enqueue(isStatic, methodSignature, null);
-    }
-
     public void enqueue(boolean isStatic, String methodSignature, String singleParam) {
         long time = System.nanoTime();
         String name = Thread.currentThread().getName();
-        enqueue(TraceObj.obtain(isStatic, time, name, methodSignature, singleParam));
+        queue.offer(TraceObj.obtain(isStatic, time, name, methodSignature, singleParam));
+//        enqueue(TraceObj.obtain(isStatic, time, name, methodSignature, singleParam));
     }
 
 //    private void enqueue(MethodTraceObj traceObj) {
@@ -70,23 +77,23 @@ public class LogRecorder {
 //        }
 //    }
 
-    private void enqueue(TraceObj traceObj) {
-        if (wip.compareAndSet(0, 1)) {
-            collect(traceObj);
-            if (wip.decrementAndGet() == 0) {
-                return;
-            }
-        } else {
-            queue.offer(traceObj);
-            if (wip.getAndIncrement() != 0) {
-                return;
-            }
-        }
-        do {
-            TraceObj poll = queue.poll();
-            collect(poll);
-        } while (wip.decrementAndGet() != 0);
-    }
+//    private void enqueue(TraceObj traceObj) {
+//        if (wip.compareAndSet(0, 1)) {
+//            collect(traceObj);
+//            if (wip.decrementAndGet() == 0) {
+//                return;
+//            }
+//        } else {
+//            queue.offer(traceObj);
+//            if (wip.getAndIncrement() != 0) {
+//                return;
+//            }
+//        }
+//        do {
+//            TraceObj poll = queue.poll();
+//            collect(poll);
+//        } while (wip.decrementAndGet() != 0);
+//    }
 
 //    private void enqueue(MethodTraceObj traceObj) {
 //        queue.offer(traceObj);
@@ -100,33 +107,4 @@ public class LogRecorder {
 //            } while (wip.decrementAndGet() != 0);
 //        }
 //    }
-
-    private void collect(TraceObj obj) {
-        buffer.add(obj);
-        if (buffer.size() >= 50) {
-            long startTime = System.currentTimeMillis();
-            if (openHelper == null) {
-                openHelper = new LogDBOpenHelper(context, LogDBOpenHelper.DB_NAME, null, LogDBOpenHelper.VERSION);
-                database = openHelper.getWritableDatabase();
-            }
-
-            database.beginTransaction();
-            try {
-                for (TraceObj traceObj : buffer) {
-                    ContentValues contentValues = new ContentValues();
-                    contentValues.put(LogDBOpenHelper.COLUMN_T_NAME, traceObj.threadName);
-                    contentValues.put(LogDBOpenHelper.COLUMN_TIME, String.valueOf(traceObj.timeStamp));
-                    contentValues.put(LogDBOpenHelper.COLUMN_METHOD, traceObj.methodSignature);
-                    contentValues.put(LogDBOpenHelper.COLUMN_PARAMS, traceObj.paramStatement);
-                    database.insert(LogDBOpenHelper.TABLE_NAME, null, contentValues);
-                    traceObj.recycle();
-                }
-                database.setTransactionSuccessful();
-            } finally {
-                database.endTransaction();
-            }
-            buffer.clear();
-            Log.e("AAA", "db duration:" + (System.currentTimeMillis() - startTime));
-        }
-    }
 }

@@ -26,4 +26,5 @@ dependencies {
     implementation fileTree(dir: 'libs', include: ['*.jar'])
     implementation "com.android.support:support-annotations:27.1.0"
     compileOnly "com.android.support:appcompat-v7:27.1.0"
+    implementation "io.reactivex:rxjava:1.3.0"
 }
