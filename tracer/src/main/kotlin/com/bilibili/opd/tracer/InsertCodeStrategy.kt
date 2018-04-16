@@ -11,7 +11,7 @@ import kotlin.collections.HashMap
 /**
  * Created by wq on 2018/3/25.
  */
-abstract class InsertCodeStrategy(val tracerExtension: TracerExtension, val obfuscator: WordObfuscator) {
+abstract class InsertCodeStrategy(val tracerExtension: TracerExtension) {
     val insertMethodCount = AtomicInteger(0)
 
     val methodMap = HashMap<String, Int>()

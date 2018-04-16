@@ -11,7 +11,7 @@ import java.util.jar.JarOutputStream
 /**
  * Created by wq on 2018/3/25.
  */
-class JavasistInsertImpl(tracerExtension: TracerExtension, obfuscator: WordObfuscator) : InsertCodeStrategy(tracerExtension, obfuscator) {
+class JavasistInsertImpl(tracerExtension: TracerExtension, val obfuscator: Obfuscator) : InsertCodeStrategy(tracerExtension) {
 
     override fun insertCode(box: List<CtClass>, jarFile: File) {
         val outStream = JarOutputStream(FileOutputStream(jarFile))
@@ -34,7 +34,7 @@ class JavasistInsertImpl(tracerExtension: TracerExtension, obfuscator: WordObfus
                     try {
                         if (declaredBehavior.methodInfo.isMethod) {
                             val codeStatement = getCodeStatement(ctClass, declaredBehavior as CtMethod)
-                            println("----code: $codeStatement")
+                            println("----inserted code: $codeStatement")
                             declaredBehavior.insertBefore(codeStatement)
                         }
                     } catch (e: Exception) {
@@ -100,22 +100,24 @@ class JavasistInsertImpl(tracerExtension: TracerExtension, obfuscator: WordObfus
 //                    "${if (isStatic) "sm:" else "m:"}${ctMethod.longName.compress()}|" +
 //                    "p:$args");
 //                """.replace("""( \+ "")""".toRegex(), "")
+
+        val methodIndex = obfuscator.methodIndex(ctMethod.longName)
+
         val replace : String
         if ("empty" == argsExp) {
             replace = """
-            if (com.bilibili.opd.tracer.core.LogRecorder.getInstance().isEnable()) {
-                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${if (tracerExtension.enableObfuscate) obfuscator.obfuscate(ctMethod.longName) else ctMethod.longName}", "empty");
+            if (${tracerExtension.delegateInstanceMethodFullName}.isEnable($methodIndex)) {
+                ${tracerExtension.delegateInstanceMethodFullName}.enqueue($methodIndex, $isStatic, "${if (tracerExtension.enableObfuscate) obfuscator.methodNameObfuscate(ctMethod.longName) else ctMethod.longName}", null);
             }
             """
         } else {
             replace = """
-            if (com.bilibili.opd.tracer.core.LogRecorder.getInstance().isEnable()) {
+            if (${tracerExtension.delegateInstanceMethodFullName}.isEnable($methodIndex)) {
                 $argsExp
-                com.bilibili.opd.tracer.core.LogRecorder.getInstance().enqueue($isStatic, "${if (tracerExtension.enableObfuscate) obfuscator.obfuscate(ctMethod.longName) else ctMethod.longName}", _trace_string);
+                ${tracerExtension.delegateInstanceMethodFullName}.enqueue($methodIndex, $isStatic, "${if (tracerExtension.enableObfuscate) obfuscator.methodNameObfuscate(ctMethod.longName) else ctMethod.longName}", _trace_string);
             }
             """
         }
-        println(replace)
         return replace
 
 //        return if (argsArrayList == null) {
@@ -143,9 +145,8 @@ class JavasistInsertImpl(tracerExtension: TracerExtension, obfuscator: WordObfus
 
             //方法过滤
             for ((methodName, signature) in tracerExtension.excludeMethodSignature) {
-                println("方法过滤 ctBehavior.signature : ${ctBehavior.signature}")
-                println("方法过滤 ctBehavior.longName : ${ctBehavior.longName}")
                 if (ctBehavior.signature == signature && methodName.toRegex().matches(ctBehavior.longName)) {
+                    println("exclude by match rule: ${ctBehavior.longName}")
                     return false
                 }
             }
@@ -155,20 +156,42 @@ class JavasistInsertImpl(tracerExtension: TracerExtension, obfuscator: WordObfus
             }
             val flag = isMethodWithExpression(ctBehavior as CtMethod)
             if (!flag) {
+                println("exclude by empty body: ${ctBehavior.longName}")
                 return false
             }
         }
 
         return when {
         //skip short method(may inline by proguard)
-            ctBehavior.methodInfo.codeAttribute.codeLength <= 8 -> false
-            ctBehavior.methodInfo.isStaticInitializer -> false
-            ctBehavior.methodInfo.isConstructor -> false
+            ctBehavior.methodInfo.codeAttribute.codeLength <= 8 -> {
+                println("exclude by short body: ${ctBehavior.longName}")
+                false
+            }
+            ctBehavior.methodInfo.isStaticInitializer -> {
+                println("exclude by static init: ${ctBehavior.longName}")
+                false
+            }
+            ctBehavior.methodInfo.isConstructor -> {
+                println("exclude by constructor: ${ctBehavior.longName}")
+                false
+            }
         // synthetic 方法暂时不aop 比如AsyncTask 会生成一些同名synthetic方法,对synthetic 以及private的方法也插入的代码，主要是针对lambda
-            ctBehavior.modifiers and AccessFlag.SYNTHETIC != 0 && !AccessFlag.isPrivate(ctBehavior.modifiers) -> false
-            ctBehavior.modifiers and AccessFlag.ABSTRACT != 0 -> false
-            ctBehavior.modifiers and AccessFlag.NATIVE != 0 -> false
-            ctBehavior.modifiers and AccessFlag.INTERFACE != 0 -> false
+            ctBehavior.modifiers and AccessFlag.SYNTHETIC != 0 && !AccessFlag.isPrivate(ctBehavior.modifiers) -> {
+                println("exclude by SYNTH !priva: ${ctBehavior.longName}")
+                false
+            }
+            ctBehavior.modifiers and AccessFlag.ABSTRACT != 0 -> {
+                println("exclude by abstract: ${ctBehavior.longName}")
+                false
+            }
+            ctBehavior.modifiers and AccessFlag.NATIVE != 0 -> {
+                println("exclude by native method: ${ctBehavior.longName}")
+                false
+            }
+            ctBehavior.modifiers and AccessFlag.INTERFACE != 0 -> {
+                println("exclude by interface: ${ctBehavior.longName}")
+                false
+            }
             else -> true
         }
     }
@@ -339,6 +362,7 @@ class JavasistInsertImpl(tracerExtension: TracerExtension, obfuscator: WordObfus
     private var isCallMethod = false
 
     /**
+     * todo 可以考虑把Log Blog 的调用都替换成我们的log
      * 判断是否有方法call
      *
      * @return 是否插桩

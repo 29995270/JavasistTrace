@@ -13,6 +13,7 @@ public class App extends Application {
     @Override
     public void onCreate() {
         super.onCreate();
+        LogRecorder.getInstance().isEnable(123);
         Stetho.initializeWithDefaults(this);
         LogRecorder.init(this);
         int itemCount = new XXXXAdapter().getItemCount();

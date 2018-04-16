@@ -4,11 +4,12 @@ import com.google.gson.Gson
 import java.io.File
 import java.io.FileWriter
 
-class WordObfuscator {
+class Obfuscator {
     private val map = HashMap<String, String>()
     private var count = 0
+    private val methodList = mutableListOf<String>()
 
-    fun obfuscate(statement: String): String {
+    fun methodNameObfuscate(statement: String): String {
         val dividerMap = mutableMapOf<Int, Char>()
         var dividerIndex = 0
         statement.forEachIndexed { _, c ->
@@ -42,6 +43,12 @@ class WordObfuscator {
         }
     }
 
+    fun methodIndex(methodName: String): Int {
+        val size = methodList.size
+        methodList.add(methodName)
+        return size
+    }
+
     fun outputMap(path: String) {
         val file = File(path)
         if (!file.exists() && (!file.parentFile.mkdirs() || !file.createNewFile())) {
@@ -49,6 +56,18 @@ class WordObfuscator {
         }
         with(FileWriter(file)) {
             write(Gson().toJson(map))
+            flush()
+            close()
+        }
+    }
+
+    fun outputIndex(path: String) {
+        val file = File(path)
+        if (!file.exists() && (!file.parentFile.mkdirs() || !file.createNewFile())) {
+
+        }
+        with(FileWriter(file)) {
+            write(Gson().toJson(methodList))
             flush()
             close()
         }

@@ -9,13 +9,15 @@ public class TraceObj {
 
     private static final Pool<TraceObj> sPool = new Pool<>(1000);
 
+    public int methodIndex;
     public boolean isStatic;
     public long timeStamp;
     public String threadName;
     public String methodSignature;
     public String paramStatement;
 
-    public TraceObj(boolean isStatic, long timeStamp, String threadName, String methodSignature, String paramStatement) {
+    public TraceObj(int methodIndex, boolean isStatic, long timeStamp, String threadName, String methodSignature, String paramStatement) {
+        this.methodIndex = methodIndex;
         this.isStatic = isStatic;
         this.timeStamp = timeStamp;
         this.threadName = threadName;
@@ -25,7 +27,7 @@ public class TraceObj {
 
     @Override
     public String toString() {
-        return isStatic +
+        return methodIndex +
                 "}{" + timeStamp +
                 "}{" + threadName +
                 "}{" + methodSignature +
@@ -36,9 +38,10 @@ public class TraceObj {
         sPool.release(this);
     }
 
-    public static TraceObj obtain(boolean isStatic, long timeStamp, String threadName, String methodSignature, String paramStatement) {
+    public static TraceObj obtain(int methodIndex, boolean isStatic, long timeStamp, String threadName, String methodSignature, String paramStatement) {
         TraceObj instance = sPool.acquire();
         if (instance != null) {
+            instance.methodIndex = methodIndex;
             instance.isStatic = isStatic;
             instance.timeStamp = timeStamp;
             instance.threadName = threadName;
@@ -46,7 +49,7 @@ public class TraceObj {
             instance.paramStatement = paramStatement;
             return instance;
         } else {
-            return new TraceObj(isStatic, timeStamp, threadName, methodSignature, paramStatement);
+            return new TraceObj(methodIndex, isStatic, timeStamp, threadName, methodSignature, paramStatement);
         }
     }
 

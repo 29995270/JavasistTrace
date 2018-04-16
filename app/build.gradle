@@ -34,6 +34,7 @@ android {
 }
 
 tracer {
+    delegateInstanceMethodFullName = 'com.bilibili.opd.javasisttrace.MyTracerDelegate.getInstance()'
     tracePackageNames = ["com.bilibili.opd.javasisttrace"]
     excludePackageNames = [
             "com.bilibili.opd.javasisttrace.donot",
