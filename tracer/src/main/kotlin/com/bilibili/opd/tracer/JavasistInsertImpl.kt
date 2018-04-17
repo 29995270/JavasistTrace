@@ -34,12 +34,12 @@ class JavasistInsertImpl(tracerExtension: TracerExtension, val obfuscator: Obfus
                     try {
                         if (declaredBehavior.methodInfo.isMethod) {
                             val codeStatement = getCodeStatement(ctClass, declaredBehavior as CtMethod)
-                            println("----inserted code: $codeStatement")
+//                            println("----inserted code: $codeStatement")
                             declaredBehavior.insertBefore(codeStatement)
                         }
                     } catch (e: Exception) {
                         println("insert code fail $declaredBehavior")
-                        e.printStackTrace()
+//                        e.printStackTrace()
                     }
                 }
             }
@@ -62,6 +62,8 @@ class JavasistInsertImpl(tracerExtension: TracerExtension, val obfuscator: Obfus
     private fun isIdField(field: CtField) = field.name.endsWith("id", true) && (field.type.name == "int" || field.type.name == "long")
 
     private fun isStringType(ctClass: CtClass) = ctClass.name == String::class.java.name
+
+    private fun isArrayType(ctClass: CtClass) = ctClass.isArray
 
     private fun isCollectionType(ctClass: CtClass) =
             ctClass.name == List::class.java.name
@@ -106,15 +108,15 @@ class JavasistInsertImpl(tracerExtension: TracerExtension, val obfuscator: Obfus
         val replace : String
         if ("empty" == argsExp) {
             replace = """
-            if (${tracerExtension.delegateInstanceMethodFullName}.isEnable($methodIndex)) {
-                ${tracerExtension.delegateInstanceMethodFullName}.enqueue($methodIndex, $isStatic, "${if (tracerExtension.enableObfuscate) obfuscator.methodNameObfuscate(ctMethod.longName) else ctMethod.longName}", null);
+            if (${tracerExtension.delegateInstanceHolderClass}.isEnable($methodIndex)) {
+                ${tracerExtension.delegateInstanceHolderClass}.enqueue($methodIndex, $isStatic, "${if (tracerExtension.enableObfuscate) obfuscator.methodNameObfuscate(ctMethod.longName) else ctMethod.longName}", null);
             }
             """
         } else {
             replace = """
-            if (${tracerExtension.delegateInstanceMethodFullName}.isEnable($methodIndex)) {
+            if (${tracerExtension.delegateInstanceHolderClass}.isEnable($methodIndex)) {
                 $argsExp
-                ${tracerExtension.delegateInstanceMethodFullName}.enqueue($methodIndex, $isStatic, "${if (tracerExtension.enableObfuscate) obfuscator.methodNameObfuscate(ctMethod.longName) else ctMethod.longName}", _trace_string);
+                ${tracerExtension.delegateInstanceHolderClass}.enqueue($methodIndex, $isStatic, "${if (tracerExtension.enableObfuscate) obfuscator.methodNameObfuscate(ctMethod.longName) else ctMethod.longName}", _trace_string);
             }
             """
         }
@@ -229,6 +231,14 @@ class JavasistInsertImpl(tracerExtension: TracerExtension, val obfuscator: Obfus
                     } else {
                         append("""_trace_builder.append($${index + 1} == null ? "null" : String.valueOf($${index + 1}.length()));""")
                     }
+                } else if (isStringType(paramType)) {//array 类型，直接打印长度
+                    handleParamsCount++
+                    if (index != 0) {
+                        append("""_trace_builder.append(";")""")
+                        append(""".append($${index + 1} == null ? "null" : String.valueOf($${index + 1}.length));""")
+                    } else {
+                        append("""_trace_builder.append($${index + 1} == null ? "null" : String.valueOf($${index + 1}.length));""")
+                    }
                 } else {
                     handleParamsCount++
                     if (index != 0) append("""_trace_builder.append(";");""")
@@ -265,6 +275,22 @@ class JavasistInsertImpl(tracerExtension: TracerExtension, val obfuscator: Obfus
                                             _trace_builder.append("null");
                                         } else {
                                             _trace_builder.append($${index + 1}.${field.name}.length());
+                                        }
+                                    """)
+                                    tracedFieldCount++
+                                }
+                                isArrayType(field.type) -> {
+                                    if (tracedFieldCount != 0) {
+                                        append("""_trace_builder.append(",")""")
+                                        append(""".append("$${index + 1}.${field.name}=");""")
+                                    } else {
+                                        append("""_trace_builder.append("$${index + 1}.${field.name}=");""")
+                                    }
+                                    append("""
+                                        if ($${index + 1}.${field.name} == null) {
+                                            _trace_builder.append("null");
+                                        } else {
+                                            _trace_builder.append($${index + 1}.${field.name}.length);
                                         }
                                     """)
                                     tracedFieldCount++

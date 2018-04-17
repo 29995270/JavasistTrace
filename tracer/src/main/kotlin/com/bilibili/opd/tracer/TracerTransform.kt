@@ -5,7 +5,6 @@ import com.android.build.api.transform.QualifiedContent
 import com.android.build.api.transform.Transform
 import com.android.build.api.transform.TransformInvocation
 import com.android.build.gradle.*
-import com.android.build.gradle.internal.InternalScope
 import com.android.build.gradle.internal.pipeline.TransformManager
 import com.bilibili.opd.tracer.extension.TracerExtension
 import javassist.ClassPool
@@ -28,11 +27,17 @@ class TracerTransform(private val project: Project) : Transform() {
     override fun isIncremental() = false
 
     //https://stackoverflow.com/questions/38512487/definitions-for-gradle-transform-api-scopes
-    override fun getScopes() {
+    override fun getScopes(): MutableSet<in QualifiedContent.Scope> {
         project.plugins.any {
             when (it) {
-                is LibraryPlugin -> mutableSetOf(QualifiedContent.Scope.PROJECT)
-                else TransformManager.SCOPE_FULL_PROJECT
+                is LibraryPlugin -> true
+                else -> false
+            }
+        }.run {
+            return if (this) {
+                mutableSetOf(QualifiedContent.Scope.PROJECT)
+            } else {
+                TransformManager.SCOPE_FULL_PROJECT
             }
         }
     }
@@ -42,10 +47,6 @@ class TracerTransform(private val project: Project) : Transform() {
         println("start tracer transform")
         transformInvocation?.run {
             val tracer = project.extensions.getByType(TracerExtension::class.java)
-
-            tracer.excludePackageNames = mutableListOf(
-                    "com.bilibili.opd.tracer.core"
-            ).apply { addAll(tracer.excludePackageNames) }
 
             outputProvider.deleteAll()
             val jarFile = outputProvider.getContentLocation("main", outputTypes, scopes, Format.JAR)
@@ -59,12 +60,13 @@ class TracerTransform(private val project: Project) : Transform() {
 
             val classPool = ClassPool()
 
-            val androidExtension = project.extensions.getByType(LibraryExtension::class.java)
-            androidExtension.bootClasspath.forEach {
+            var androidExtension: BaseExtension? = project.extensions.findByType(LibraryExtension::class.java)
+            androidExtension = androidExtension ?: project.extensions.findByType(AppExtension::class.java)
+            androidExtension!!.bootClasspath.forEach {
                 classPool.appendClassPath(it.absolutePath)
             }
             val box = classPool.insertClassPath(inputs)
-            println("delegateInstanceMethodFullName: ${tracer.delegateInstanceMethodFullName}")
+            println("delegateInstanceHolderClass: ${tracer.delegateInstanceHolderClass}")
             println("tracePackageNames: ${tracer.tracePackageNames}")
             println("excludePackageNames: ${tracer.excludePackageNames}")
             println("excludeMethodNames: ${tracer.excludeMethodSignature}")

@@ -33,7 +33,7 @@ public class LogRecorder implements Recorder {
 //        }
 //    });
 
-    private static Recorder INSTANCE = new Recorder() {
+    private static Recorder EMPTY = new Recorder() {
         @Override
         public boolean isEnable(int methodIndex) {
             return false;
@@ -42,6 +42,8 @@ public class LogRecorder implements Recorder {
         @Override
         public void enqueue(int methodIndex, boolean isStatic, String methodSignature, String singleParam) {/*do nothing*/}
     };
+
+    private static Recorder INSTANCE = EMPTY;
 
     private final LogStorage logStorage;
 
@@ -52,7 +54,7 @@ public class LogRecorder implements Recorder {
     private final LogFrequencyStatistic frequencyStatistic;
 
     public static void init(Context context) {
-        if (INSTANCE == null) {
+        if (INSTANCE == EMPTY) {
             INSTANCE = new LogRecorder(context);
         }
     }

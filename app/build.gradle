@@ -23,7 +23,7 @@ android {
         }
 
         debug {
-            minifyEnabled true
+            minifyEnabled false
             proguardFiles 'proguard-rules.pro'
         }
     }
@@ -34,7 +34,7 @@ android {
 }
 
 tracer {
-    delegateInstanceMethodFullName = 'com.bilibili.opd.javasisttrace.MyTracerDelegate.getInstance()'
+    delegateInstanceHolderClass = 'com.bilibili.opd.javasisttrace.MyTracerDelegate'
     tracePackageNames = ["com.bilibili.opd.javasisttrace"]
     excludePackageNames = [
             "com.bilibili.opd.javasisttrace.donot",

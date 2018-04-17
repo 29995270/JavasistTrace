@@ -12,6 +12,15 @@ import kotlin.collections.HashMap
  * Created by wq on 2018/3/25.
  */
 abstract class InsertCodeStrategy(val tracerExtension: TracerExtension) {
+
+    init {
+        tracerExtension.excludePackageNames = mutableListOf<String>().apply {
+            addAll(tracerExtension.excludePackageNames)
+            add(tracerExtension.delegateInstanceHolderClass)
+            add("com.bilibili.opd.tracer.core")
+        }
+    }
+
     val insertMethodCount = AtomicInteger(0)
 
     val methodMap = HashMap<String, Int>()
