@@ -1,5 +1,5 @@
 apply plugin: 'com.android.library'
-
+apply plugin: 'maven'
 
 android {
     compileSdkVersion 27
@@ -19,6 +19,19 @@ android {
     sourceSets {
         main {
             java.srcDirs = ['src/main/java', 'src/main/kotlin']
+        }
+    }
+}
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            //设置插件的GAV参数
+            pom.groupId = 'com.bilibili.opd'
+            pom.version = '0.0.2'
+            pom.artifactId = 'tracercore'
+            //文件发布到下面目录
+            repository(url: uri('../repo'))
         }
     }
 }

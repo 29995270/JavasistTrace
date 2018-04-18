@@ -10,7 +10,9 @@ import com.bilibili.opd.tracer.core.annotation.TraceField;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Created by wq on 2018/4/3.
@@ -38,6 +40,20 @@ public class OutBean {
     private int wwwwId;
 
     private List<String> stringList = null;
+
+    private String[] arry = new String[2];
+
+    private Map<String, String> map = new HashMap<>();
+
+    private boolean aBoolean = false;
+
+    private String aa = "fasdfasdf";
+
+    private byte aByte = 1;
+
+    private double aDouble = 23d;
+
+    private float aFloat = 23.4f;
 
     public OutBean(int fieldA, int fieldB) {
         this.fieldA = fieldA;

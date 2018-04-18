@@ -39,12 +39,13 @@ public class MainActivity extends AppCompatActivity {
         publicMethod(new Bean());
         publicMethod(new OutBean(12, 21));
 
-//        long start = System.currentTimeMillis();
-//        for (int i = 0; i < 10000; i++) {
+        long start = System.currentTimeMillis();
+        for (int i = 0; i < 10000; i++) {
 //            publicMethod(new OutBean(random.nextInt(100), random.nextInt(100)));
-////            publicMethod(new Bean());
-//        }
-//        Log.e("AAA", "duration: " + (System.currentTimeMillis() - start));
+//            publicMethod();
+            publicMethod(new OutBean(123, 2314));
+        }
+        Log.e("AAA", "duration: " + (System.currentTimeMillis() - start));
 
         listMethod(Collections.emptyList());
     }
@@ -61,6 +62,11 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void publicMethod(Bean b) {
+        System.out.println(1);
+        System.out.println(1);
+    }
+
+    public void publicMethod() {
         System.out.println(1);
         System.out.println(1);
     }
